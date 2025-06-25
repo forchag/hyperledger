@@ -62,6 +62,12 @@ On each additional Pi that represents a sensor node run:
     python3 lora_node.py
     python3 network_monitor.py
 
+You can test data upload and recovery with:
+
+    python3 tools/data_tool.py upload sensor-1 reading.json
+    python3 tools/data_tool.py verify sensor-1
+    python3 tools/data_tool.py recover sensor-1
+
 These scripts demonstrate sending sensor readings and logging heartbeat
 events through the Flask API and onto the blockchain.
 
