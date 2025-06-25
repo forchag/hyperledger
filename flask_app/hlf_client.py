@@ -34,3 +34,25 @@ def get_sensor_data(sensor_id):
         'timestamp': '1970-01-01T00:00:00Z',
         'cid': 'QmExampleCID'
     }
+
+
+def query_blockchain_info():
+    """Return basic ledger info such as height and current block hash."""
+    print("[HLF] query blockchain info")
+    return {
+        'height': 0,
+        'current_hash': '0x0'
+    }
+
+
+def get_block(block_number):
+    """Retrieve a specific block."""
+    print(f"[HLF] get block {block_number}")
+    return {
+        'header': {
+            'number': block_number,
+            'previous_hash': '0x0',
+            'data_hash': '0x0'
+        },
+        'data': []
+    }

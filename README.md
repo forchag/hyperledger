@@ -27,9 +27,13 @@ Visit `https://<pi-ip>:8443/` to open the dashboard. Sensor data can also be pos
 
 ## LoRa examples
 
-`lora_node.py` shows how a sensor node could send readings over LoRa using the `pySX127x` library. `network_monitor.py` periodically logs device heartbeats on-chain.
+`lora_node.py` shows how a sensor node can send sensor readings or periodic
+heartbeat packets over LoRa using the `pySX127x` library. The companion
+`network_monitor.py` listens for these heartbeats, logs them on the blockchain
+and prints a list of discovered nodes every minute.
 
-These scripts are stubs and can be run on a Raspberry Pi with appropriate radio modules attached.
+These scripts are stubs and can be run on a Raspberry Pi with appropriate radio
+modules attached.
 
 ## Running a Fabric network
 
@@ -53,3 +57,37 @@ python tools/data_tool.py recover sensor-1
 
 These examples assume an IPFS daemon is running locally and that the chaincode has been deployed as described above.
 The dashboard offers buttons for verifying and recovering data using the same logic.
+
+## Blockchain design
+
+This project uses **Hyperledger Fabric**, a permissioned blockchain platform. Peers
+endorse transactions and store the ledger, while an ordering service
+creates blocks using the RAFT consensus algorithm. Each block contains a
+header with the number, the hash of the previous block, and the hash of
+its transaction data. This hash chaining makes the ledger immutable –
+any change would break the chain of hashes.
+
+Sensor readings and heartbeat events are submitted through chaincode
+(`sensor.go`). Each transaction is endorsed, ordered into a block, and
+committed to all peers. Clients can query the ledger to retrieve device
+information or verify data integrity.
+
+### Inspecting and verifying blocks
+
+The Fabric CLI can display high level ledger information:
+
+```bash
+peer channel getinfo -c mychannel
+```
+
+Specific blocks may be fetched and decoded using the CLI or the Python
+`tools/block_inspector.py` utility:
+
+```bash
+python tools/block_inspector.py --info
+python tools/block_inspector.py --block 2
+```
+
+The inspector prints the block header including `previous_hash` and
+`data_hash`, allowing you to differentiate one block from another and
+view the stored transactions.
