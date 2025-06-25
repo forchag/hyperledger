@@ -32,12 +32,14 @@ heartbeat packets over LoRa using the `pySX127x` library. The companion
 `network_monitor.py` listens for these heartbeats, logs them on the blockchain
 and prints a list of discovered nodes every minute.
 
-These scripts are stubs and can be run on a Raspberry Pi with appropriate radio
-modules attached.
+`sensor_node.py` polls a DHT22, soil moisture, pH, light and water level sensor
+every few seconds, stores the data on the blockchain and can optionally forward
+the payload over LoRa. These scripts are stubs and can be run on a Raspberry Pi
+with appropriate radio modules attached.
 
 ## Running a Fabric network
 
-This repository does not include the full Fabric test network. Refer to the official [Fabric documentation](https://hyperledger-fabric.readthedocs.io/) to bootstrap a network using the `test-network` samples. Deploy the chaincode in `chaincode/sensor` and update `hlf_client.py` to submit transactions via the Fabric SDK.
+This repository does not include the full Fabric test network. Refer to the official [Fabric documentation](https://hyperledger-fabric.readthedocs.io/) to bootstrap a network using the `test-network` samples. Deploy the chaincode in `chaincode/sensor` and update `hlf_client.py` to submit transactions via the Fabric SDK. The helper script `test_netwoek.sh` automates these steps by downloading the samples, starting the network and deploying the chaincode.
 
 ## Data tools and recovery demo
 
