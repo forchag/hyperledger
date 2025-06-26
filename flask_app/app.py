@@ -61,8 +61,23 @@ def index():
         <html>
         <head>
             <style>
-                body { font-family: Arial, sans-serif; margin: 40px; }
-                h1 { color: #2c3e50; }
+                body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
+                header {
+                    background-color: #2c3e50;
+                    color: #fff;
+                    padding: 20px;
+                    text-align: center;
+                }
+                main { padding: 40px; }
+                footer {
+                    background-color: #f4f4f4;
+                    text-align: center;
+                    padding: 10px 0;
+                    position: fixed;
+                    bottom: 0;
+                    width: 100%;
+                }
+                h1 { margin: 0; }
                 form { margin-bottom: 20px; }
                 button { padding: 6px 12px; }
                 #node-list li { margin-left: 20px; }
@@ -91,7 +106,10 @@ def index():
             </script>
         </head>
         <body>
-        <h1>Hyperledger Farm Dashboard</h1>
+        <header>
+            <h1>Hyperledger Farm Dashboard</h1>
+        </header>
+        <main>
         <p>Registered nodes: {{count}}</p>
         <button onclick="discover()">Discover Active Nodes</button>
         <p>Active nodes: <span id="node-count">0</span></p>
@@ -113,6 +131,10 @@ def index():
         <button onclick="showMerkle()">Show</button>
         <p>Root: <span id="merkle-root"></span></p>
         <ul id="merkle-tree"></ul>
+        </main>
+        <footer>
+            Hyperledger Farm Example
+        </footer>
         </body>
         </html>
         """,
