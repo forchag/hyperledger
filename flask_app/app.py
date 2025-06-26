@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 import subprocess
 import hashlib
+from pathlib import Path
 
 # Placeholder for Hyperledger Fabric client imports
 from hlf_client import (
@@ -21,13 +22,17 @@ client = ipfshttpclient.connect('/dns/localhost/tcp/5001/http')
 # Potential Raspberry Pi addresses to probe when discovering active nodes
 NODE_ADDRESSES = [
     '192.168.0.163',
-    '192.168.0.164',
-    '192.168.0.165',
-    '192.168.0.166',
-    '192.168.0.167',
-    '192.168.0.168',
-    '192.168.0.169',
+    '192.168.0.199',
+    '192.168.0.200',
 ]
+
+# Mapping of node IPs to sensors attached to that node. The key is the IP
+# address and the value is a dictionary mapping the sensor name to the GPIO pin.
+NODE_SENSORS = {
+    '192.168.0.163': {'dht22': 4, 'soil': 17},
+    '192.168.0.199': {'dht22': 4, 'soil': 17},
+    '192.168.0.200': {'dht22': 4, 'soil': 17},
+}
 
 
 def compute_merkle_root(tx_hashes):
@@ -68,7 +73,11 @@ def index():
                 const data = await res.json();
                 document.getElementById('node-count').innerText = data.count;
                 document.getElementById('node-list').innerHTML =
-                    data.nodes.map(n => `<li>${n}</li>`).join('');
+                    data.nodes.map(n => {
+                        const sensors = Object.entries(n.sensors)
+                            .map(([k,v]) => `${k}:${v}`).join(', ');
+                        return `<li>${n.ip} (${sensors})</li>`;
+                    }).join('');
             }
             async function showMerkle() {
                 const num = document.getElementById('block-num').value;
@@ -130,10 +139,30 @@ def ping_node(ip: str) -> bool:
         return False
 
 
+def start_blockchain():
+    """Start the Fabric test network."""
+    try:
+        script = Path(__file__).resolve().parent.parent / 'test_network.sh'
+        subprocess.Popen(['bash', str(script)])
+        print('Blockchain network start initiated')
+    except Exception as e:
+        print('Failed to start blockchain:', e)
+
+
+def check_and_start_blockchain():
+    """Start the blockchain if at least two devices are registered."""
+    if len(list_devices()) >= 2:
+        start_blockchain()
+
+
 @app.route('/discover')
 def discover():
     active = [ip for ip in NODE_ADDRESSES if ping_node(ip)]
-    return jsonify({'count': len(active), 'nodes': active})
+    nodes = [
+        {'ip': ip, 'sensors': NODE_SENSORS.get(ip, {})}
+        for ip in active
+    ]
+    return jsonify({'count': len(active), 'nodes': nodes})
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -154,6 +183,7 @@ def register():
     if not data or 'id' not in data or 'owner' not in data:
         return 'Invalid JSON', 400
     register_device(data['id'], data['owner'])
+    check_and_start_blockchain()
     return 'registered'
 
 @app.route('/retrieve/<cid>', methods=['GET'])
