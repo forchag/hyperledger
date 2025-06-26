@@ -2,6 +2,8 @@ from flask import Flask, request, jsonify, render_template_string
 import ipfshttpclient
 import json
 from datetime import datetime
+import subprocess
+import hashlib
 
 # Placeholder for Hyperledger Fabric client imports
 from hlf_client import (
@@ -10,10 +12,40 @@ from hlf_client import (
     log_event,
     get_sensor_data,
     list_devices,
+    get_block,
 )
 
 app = Flask(__name__)
 client = ipfshttpclient.connect('/dns/localhost/tcp/5001/http')
+
+# Potential Raspberry Pi addresses to probe when discovering active nodes
+NODE_ADDRESSES = [
+    '192.168.0.163',
+    '192.168.0.164',
+    '192.168.0.165',
+    '192.168.0.166',
+    '192.168.0.167',
+    '192.168.0.168',
+    '192.168.0.169',
+]
+
+
+def compute_merkle_root(tx_hashes):
+    """Return Merkle root and list of levels for given transaction hashes."""
+    if not tx_hashes:
+        return '0x0', []
+    level = tx_hashes[:]
+    tree = [level]
+    while len(level) > 1:
+        next_level = []
+        for i in range(0, len(level), 2):
+            left = level[i]
+            right = level[i + 1] if i + 1 < len(level) else left
+            m = hashlib.sha256((left + right).encode()).hexdigest()
+            next_level.append(m)
+        level = next_level
+        tree.append(level)
+    return level[0], tree
 
 
 @app.route('/')
@@ -21,8 +53,40 @@ def index():
     nodes = list_devices()
     return render_template_string(
         """
+        <html>
+        <head>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 40px; }
+                h1 { color: #2c3e50; }
+                form { margin-bottom: 20px; }
+                button { padding: 6px 12px; }
+                #node-list li { margin-left: 20px; }
+            </style>
+            <script>
+            async function discover() {
+                const res = await fetch('/discover');
+                const data = await res.json();
+                document.getElementById('node-count').innerText = data.count;
+                document.getElementById('node-list').innerHTML =
+                    data.nodes.map(n => `<li>${n}</li>`).join('');
+            }
+            async function showMerkle() {
+                const num = document.getElementById('block-num').value;
+                if(!num) return;
+                const res = await fetch('/merkle/' + num);
+                const data = await res.json();
+                document.getElementById('merkle-root').innerText = data.root;
+                const levels = data.tree.map(l => '<li>' + l.join(', ') + '</li>').join('');
+                document.getElementById('merkle-tree').innerHTML = levels;
+            }
+            </script>
+        </head>
+        <body>
         <h1>Hyperledger Farm Dashboard</h1>
         <p>Registered nodes: {{count}}</p>
+        <button onclick="discover()">Discover Active Nodes</button>
+        <p>Active nodes: <span id="node-count">0</span></p>
+        <ul id="node-list"></ul>
         <h2>Upload Sensor File</h2>
         <form action="/upload" method="post" enctype="multipart/form-data">
             <input type="file" name="file" />
@@ -35,6 +99,13 @@ def index():
             <input name="humidity" placeholder="humidity" />
             <button type="submit">Send</button>
         </form>
+        <h2>Merkle Tree</h2>
+        <input id="block-num" placeholder="block number" />
+        <button onclick="showMerkle()">Show</button>
+        <p>Root: <span id="merkle-root"></span></p>
+        <ul id="merkle-tree"></ul>
+        </body>
+        </html>
         """,
         count=len(nodes),
     )
@@ -44,6 +115,25 @@ def index():
 def nodes():
     nodes = list_devices()
     return jsonify({'count': len(nodes), 'nodes': nodes})
+
+
+def ping_node(ip: str) -> bool:
+    """Return True if the given IP responds to a single ping."""
+    try:
+        res = subprocess.run(
+            ['ping', '-c', '1', '-W', '1', ip],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return res.returncode == 0
+    except Exception:
+        return False
+
+
+@app.route('/discover')
+def discover():
+    active = [ip for ip in NODE_ADDRESSES if ping_node(ip)]
+    return jsonify({'count': len(active), 'nodes': active})
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -100,6 +190,18 @@ def recover(sensor_id):
         return 'Recovery successful'
     return jsonify({'old_cid': cid, 'new_cid': new_cid})
 
+
+@app.route('/merkle/<int:block_num>')
+def merkle(block_num: int):
+    """Return Merkle tree information for a block."""
+    block = get_block(block_num)
+    tx_hashes = [
+        hashlib.sha256(json.dumps(tx).encode()).hexdigest()
+        for tx in block.get('data', [])
+    ]
+    root, tree = compute_merkle_root(tx_hashes)
+    return jsonify({'root': root, 'tree': tree})
+
 @app.route('/sensor', methods=['POST'])
 def record_sensor():
     if request.is_json:
@@ -108,6 +210,7 @@ def record_sensor():
         data = request.form.to_dict()
     if not data:
         return 'Invalid payload', 400
+    data['node_ip'] = request.remote_addr
     data['timestamp'] = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
     js = json.dumps(data).encode('utf-8')
     ipfs_res = client.add_bytes(js)
