@@ -37,11 +37,51 @@ every few seconds, stores the data on the blockchain and can optionally forward
 the payload over LoRa. These scripts are stubs and can be run on a Raspberry Pi
 with appropriate radio modules attached.
 
-## Running a Fabric network
+## Running a Fabric network locally
 
-This repository does not include the full Fabric test network. Refer to the official [Fabric documentation](https://hyperledger-fabric.readthedocs.io/) to bootstrap a network using the `test-network` samples. Deploy the chaincode in `chaincode/sensor` and update `hlf_client.py` to submit transactions via the Fabric SDK. The helper script `test_netwoek.sh` automates these steps by downloading the samples, starting the network and deploying the chaincode.
+Follow the steps below to launch a small Fabric network and deploy the sensor chaincode on a single machine.
 
-## Data tools and recovery demo
+1. **Install prerequisites**
+   Ensure Docker, Docker Compose, Git and curl are installed. On Debian based systems run:
+   ```bash
+   sudo apt update
+   sudo apt install -y docker.io docker-compose git curl
+   sudo usermod -aG docker $USER
+   newgrp docker
+   ```
+
+2. **Download Fabric samples and binaries** (required once):
+   ```bash
+   curl -sSL https://bit.ly/2ysbOFE | bash -s -- 2.5.0
+   ```
+   This creates a `fabric-samples` directory containing the `test-network` sample.
+
+3. **Start the network and deploy chaincode**
+   From the repository root run:
+   ```bash
+   ./test_network.sh
+   ```
+   The script starts the Fabric network and deploys the `sensor` chaincode.
+
+4. **Start supporting services**
+   Open a new terminal and run:
+   ```bash
+   ipfs daemon
+   ```
+   In another terminal launch the Flask API:
+   ```bash
+   pip install flask ipfshttpclient
+   python flask_app/app.py
+   ```
+
+5. **Interact with the network**
+   Visit `https://localhost:8443/` to use the dashboard or invoke the tools in the `tools` directory.
+
+To stop the network run:
+```bash
+cd fabric-samples/test-network
+./network.sh down
+```
 
 The `tools/data_tool.py` script provides a command line utility to upload sensor payloads to IPFS and store the resulting CID on chain. It can also retrieve and verify stored data:
 
