@@ -39,9 +39,15 @@ with appropriate radio modules attached.
 
 ## Running a Fabric network locally
 
-Follow the steps below to launch a small Fabric network and deploy the sensor chaincode on a single machine.
+The instructions below walk through a complete setup on a small Raspberry Pi cluster. The first Pi is assumed to have the address `192.168.0.163` and additional nodes can use `192.168.0.164` through `192.168.0.169`.
 
-1. **Install prerequisites**
+1. **Clone this repository on the first Pi and change into it**
+   ```bash
+   git clone https://github.com/<your-user>/hyperledger-farm-network.git
+   cd hyperledger-farm-network
+   ```
+
+2. **Install prerequisites**
    Ensure Docker, Docker Compose, Git and curl are installed. On Debian based systems run:
    ```bash
    sudo apt update
@@ -50,38 +56,43 @@ Follow the steps below to launch a small Fabric network and deploy the sensor ch
    newgrp docker
    ```
 
-2. **Download Fabric samples and binaries** (required once):
+3. **Download Fabric samples and binaries** (required once)
    ```bash
    curl -sSL https://bit.ly/2ysbOFE | bash -s -- 2.5.0
    ```
    This creates a `fabric-samples` directory containing the `test-network` sample.
 
-3. **Start the network and deploy chaincode**
+4. **Start the network and deploy chaincode**
    From the repository root run:
    ```bash
    ./test_network.sh
    ```
-   The script starts the Fabric network and deploys the `sensor` chaincode.
+   If you receive a permission denied error, make the script executable with:
+   ```bash
+   chmod +x test_network.sh
+   ./test_network.sh
+   ```
+   The script automatically changes into `fabric-samples/test-network`, brings up the Fabric network and deploys the `sensor` chaincode.
 
-4. **Start supporting services**
-   Open a new terminal and run:
+5. **Start supporting services**
+   Open a new terminal and run the IPFS daemon:
    ```bash
    ipfs daemon
    ```
-   In another terminal launch the Flask API:
+   In another terminal launch the Flask API from the repository root:
    ```bash
    pip install flask ipfshttpclient
    python flask_app/app.py
    ```
 
-5. **Interact with the network**
-   Visit `https://localhost:8443/` to use the dashboard or invoke the tools in the `tools` directory.
+6. **Interact with the network**
+   Open `https://192.168.0.163:8443/` in your browser to use the dashboard or invoke the tools in the `tools` directory. Replace the IP with `192.168.0.164` – `192.168.0.169` when accessing the other nodes.
 
-To stop the network run:
-```bash
-cd fabric-samples/test-network
-./network.sh down
-```
+7. **Stop the network**
+   ```bash
+   cd fabric-samples/test-network
+   ./network.sh down
+   ```
 
 The `tools/data_tool.py` script provides a command line utility to upload sensor payloads to IPFS and store the resulting CID on chain. It can also retrieve and verify stored data:
 
@@ -97,8 +108,7 @@ Simulated recovery of lost IPFS blocks is performed with:
 python tools/data_tool.py recover sensor-1
 ```
 
-These examples assume an IPFS daemon is running locally and that the chaincode has been deployed as described above.
-The dashboard offers buttons for verifying and recovering data using the same logic.
+These examples assume an IPFS daemon is running locally and that the chaincode has been deployed as described above. The dashboard offers buttons for verifying and recovering data using the same logic.
 
 ## Blockchain design
 
