@@ -4,12 +4,19 @@
 # a Fabric network to invoke the sensor chaincode.
 # A real implementation would use the Fabric SDK to submit transactions.
 
+# Keep a simple in-memory registry of devices so that the Flask app can
+# demonstrate interactions with multiple nodes without a real Fabric backend.
+DEVICES = []
+
+
 def record_sensor_data(id, temperature, humidity, timestamp, cid):
     """Submit RecordSensorData transaction."""
     print(f"[HLF] record {id} {temperature} {humidity} {timestamp} {cid}")
 
 def register_device(id, owner):
     """Register a device with the ledger."""
+    if id not in DEVICES:
+        DEVICES.append(id)
     print(f"[HLF] register device {id} owner {owner}")
 
 def log_event(device_id, event_type, timestamp):
@@ -19,8 +26,8 @@ def log_event(device_id, event_type, timestamp):
 
 def list_devices():
     """Return a list of registered device IDs."""
-    # This would normally query the ledger.
-    return ['device-1', 'device-2']
+    # This would normally query the ledger. We return the in-memory list.
+    return DEVICES
 
 
 def get_sensor_data(sensor_id):

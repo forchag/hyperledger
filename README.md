@@ -39,7 +39,7 @@ with appropriate radio modules attached.
 
 ## Running a Fabric network locally
 
-The instructions below walk through a complete setup on a small Raspberry Pi cluster. The first Pi is assumed to have the address `192.168.0.163` and additional nodes can use `192.168.0.164` through `192.168.0.169`.
+The instructions below walk through a complete setup on a small Raspberry Pi cluster. The first Pi is assumed to have the address `192.168.0.163` and additional nodes can use `192.168.0.199` and `192.168.0.200`.
 
 1. **Clone this repository on the first Pi and change into it**
    ```bash
@@ -77,11 +77,21 @@ The instructions below walk through a complete setup on a small Raspberry Pi clu
    In another terminal launch the Flask API from the repository root:
    ```bash
    pip install flask ipfshttpclient
-   python flask_app/app.py
-   ```
-
+    python flask_app/app.py
+    ```
 6. **Interact with the network**
-   Open `https://192.168.0.163:8443/` in your browser to use the dashboard or invoke the tools in the `tools` directory. Replace the IP with `192.168.0.164` – `192.168.0.169` when accessing the other nodes.
+    Open `https://192.168.0.163:8443/` in your browser to use the dashboard or invoke the tools in the `tools` directory.
+
+### Adding another Raspberry Pi
+
+Clone this repository on the new Pi (for example `192.168.0.199` or `192.168.0.200`) and repeat the dependency installation. Start the IPFS daemon and launch the Flask app:
+
+```bash
+ipfs daemon
+python flask_app/app.py
+```
+
+Visit `https://<new-pi-ip>:8443/` to access the dashboard of that node. Once two or more nodes are registered the first Pi automatically starts the Fabric network.
 
 7. **Stop the network**
    ```bash
