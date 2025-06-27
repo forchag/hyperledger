@@ -3,86 +3,127 @@
 <head>
   <meta charset="UTF-8">
   <title>Connect Sensors</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    h1 { color: #2c3e50; }
-    label { display: block; margin-top: 10px; }
-    .sensor-section { margin-bottom: 20px; }
-  </style>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/css/bootstrap.min.css" rel="stylesheet">
 </head>
-<body>
-  <h1>Connect Sensors to Your Node</h1>
-  <p>This page explains how to attach common sensors to a Raspberry Pi-based node. Select the GPIO pin used for each sensor and note the metric each sensor provides.</p>
+<body class="bg-light">
+  <div class="container py-4">
+  <h1 class="mb-3">Connect Sensors to Your Node</h1>
+  <p class="mb-4">This page explains how to attach common sensors to a Raspberry Pi-based node. Select the GPIO pin used for each sensor and note the metric each sensor provides.</p>
 
-  <form id="sensor-form">
-    <div class="sensor-section">
-      <h2>DHT22 (Temperature &amp; Humidity)</h2>
-      <label>GPIO Pin:
-        <select name="dht22_pin">
-          <option value="4">4</option>
-          <option value="17">17</option>
-          <option value="27">27</option>
-          <option value="22">22</option>
-        </select>
-      </label>
-      <p>Measures: <strong>temperature</strong> (&deg;C) and <strong>humidity</strong> (%)</p>
+  <div id="saveMsg" class="alert alert-success d-none" role="alert"></div>
+
+  <form id="sensor-form" class="row g-3">
+    <div class="col-md-6">
+      <div class="card sensor-section">
+        <div class="card-header">DHT22 (Temperature &amp; Humidity)</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label">GPIO Pin
+              <select name="dht22_pin" class="form-select">
+                <option value="4">4</option>
+                <option value="17">17</option>
+                <option value="27">27</option>
+                <option value="22">22</option>
+              </select>
+            </label>
+          </div>
+          <p class="mb-0">Measures: <strong>temperature</strong> (&deg;C) and <strong>humidity</strong> (%)</p>
+        </div>
+      </div>
     </div>
 
-    <div class="sensor-section">
-      <h2>Soil Moisture Sensor</h2>
-      <label>GPIO Pin:
-        <select name="soil_pin">
-          <option value="17">17</option>
-          <option value="27">27</option>
-          <option value="22">22</option>
-          <option value="5">5</option>
-        </select>
-      </label>
-      <p>Measures: <strong>soil moisture</strong> (%)</p>
+    <div class="col-md-6">
+      <div class="card sensor-section">
+        <div class="card-header">Soil Moisture Sensor</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label">GPIO Pin
+              <select name="soil_pin" class="form-select">
+                <option value="17">17</option>
+                <option value="27">27</option>
+                <option value="22">22</option>
+                <option value="5">5</option>
+              </select>
+            </label>
+          </div>
+          <p class="mb-0">Measures: <strong>soil moisture</strong> (%)</p>
+        </div>
+      </div>
     </div>
 
-    <div class="sensor-section">
-      <h2>pH Sensor</h2>
-      <label>GPIO Pin:
-        <select name="ph_pin">
-          <option value="18">18</option>
-          <option value="23">23</option>
-          <option value="24">24</option>
-          <option value="25">25</option>
-        </select>
-      </label>
-      <p>Measures: <strong>soil pH</strong></p>
+    <div class="col-md-6">
+      <div class="card sensor-section">
+        <div class="card-header">pH Sensor</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label">GPIO Pin
+              <select name="ph_pin" class="form-select">
+                <option value="18">18</option>
+                <option value="23">23</option>
+                <option value="24">24</option>
+                <option value="25">25</option>
+              </select>
+            </label>
+          </div>
+          <p class="mb-0">Measures: <strong>soil pH</strong></p>
+        </div>
+      </div>
     </div>
 
-    <div class="sensor-section">
-      <h2>Light Sensor</h2>
-      <label>GPIO Pin:
-        <select name="light_pin">
-          <option value="6">6</option>
-          <option value="12">12</option>
-          <option value="13">13</option>
-          <option value="19">19</option>
-        </select>
-      </label>
-      <p>Measures: <strong>light level</strong></p>
+    <div class="col-md-6">
+      <div class="card sensor-section">
+        <div class="card-header">Light Sensor</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label">GPIO Pin
+              <select name="light_pin" class="form-select">
+                <option value="6">6</option>
+                <option value="12">12</option>
+                <option value="13">13</option>
+                <option value="19">19</option>
+              </select>
+            </label>
+          </div>
+          <p class="mb-0">Measures: <strong>light level</strong></p>
+        </div>
+      </div>
     </div>
 
-    <div class="sensor-section">
-      <h2>Water Level Sensor</h2>
-      <label>GPIO Pin:
-        <select name="water_pin">
-          <option value="16">16</option>
-          <option value="20">20</option>
-          <option value="21">21</option>
-          <option value="26">26</option>
-        </select>
-      </label>
-      <p>Measures: <strong>water level</strong> (%)</p>
+    <div class="col-md-6">
+      <div class="card sensor-section">
+        <div class="card-header">Water Level Sensor</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label">GPIO Pin
+              <select name="water_pin" class="form-select">
+                <option value="16">16</option>
+                <option value="20">20</option>
+                <option value="21">21</option>
+                <option value="26">26</option>
+              </select>
+            </label>
+          </div>
+          <p class="mb-0">Measures: <strong>water level</strong> (%)</p>
+        </div>
+      </div>
     </div>
 
-    <button type="submit">Save Configuration</button>
+    <div class="col-12">
+      <button type="submit" class="btn btn-primary">Save Configuration</button>
+    </div>
   </form>
 
-  <p>The information entered here can be used by a setup script to configure sensor mappings for each node.</p>
+  <p class="mt-4">The information entered here can be used by a setup script to configure sensor mappings for each node.</p>
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/js/bootstrap.bundle.min.js"></script>
+  <script>
+    document.getElementById('sensor-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const msg = document.getElementById('saveMsg');
+      msg.textContent = 'Configuration saved!';
+      msg.classList.remove('d-none');
+      setTimeout(() => msg.classList.add('d-none'), 3000);
+    });
+  </script>
 </body>
 </html>
