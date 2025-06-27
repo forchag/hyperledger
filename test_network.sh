@@ -9,6 +9,9 @@ if [ ! -d fabric-samples/test-network ]; then
     curl -sSL https://bit.ly/2ysbOFE | bash -s -- 2.5.0
 fi
 
+# Vendor Go dependencies so the peer can package the chaincode offline
+(cd chaincode/sensor && go mod vendor)
+
 cd fabric-samples/test-network
 
 # Ensure any previous test network is removed to prevent channel conflicts

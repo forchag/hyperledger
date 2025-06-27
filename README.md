@@ -11,6 +11,15 @@ This directory contains a minimal example of integrating Hyperledger Fabric with
 * Logging network events
 * Sending permissioned messages between devices
 
+The chaincode folder contains a `go.mod` file declaring its module path and
+dependencies. Hyperledger Fabric requires either Go modules or a `vendor`
+directory to package Go chaincode. The provided module file enables dependency
+vendoring before deploying the chaincode. The line `module sensor` simply
+names the chaincode module; it does not need to point to a real GitHub
+repository. The only external dependency is
+`github.com/hyperledger/fabric-contract-api-go`, which Go downloads when you
+run `go mod vendor`.
+
 ### Starting the blockchain and smart contract
 
 Launch the local Fabric network and deploy the sensor chaincode using the
@@ -78,6 +87,19 @@ The instructions below walk through a complete setup on a small Raspberry Pi clu
    curl -sSL https://bit.ly/2ysbOFE | bash -s -- 2.5.0
    ```
    This creates a `fabric-samples` directory containing the `test-network` sample.
+
+   The Go chaincode in `chaincode/sensor` uses Go modules. Before deploying the
+   chaincode, vendor its dependencies so that the Fabric peer does not attempt to
+   fetch them from the internet during packaging:
+   ```bash
+   cd chaincode/sensor
+   go mod vendor
+   cd ../../
+   ```
+
+   Without a `vendor` directory the `peer lifecycle chaincode package` command
+   executed by `test_network.sh` fails to create `sensor.tar.gz` and chaincode
+   installation stops with `failed to read chaincode package at 'sensor.tar.gz'`.
 
 4. **Start the network and deploy chaincode**
    From the repository root run:
