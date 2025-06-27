@@ -17,28 +17,28 @@ from hlf_client import (
 )
 
 app = Flask(__name__)
-client = ipfshttpclient.connect('/dns/localhost/tcp/5001/http')
+client = ipfshttpclient.connect("/dns/localhost/tcp/5001/http")
 
 # Potential Raspberry Pi addresses to probe when discovering active nodes
 NODE_ADDRESSES = [
-    '192.168.0.163',
-    '192.168.0.199',
-    '192.168.0.200',
+    "192.168.0.163",
+    "192.168.0.199",
+    "192.168.0.200",
 ]
 
 # Mapping of node IPs to sensors attached to that node. The key is the IP
 # address and the value is a dictionary mapping the sensor name to the GPIO pin.
 NODE_SENSORS = {
-    '192.168.0.163': {'dht22': 4, 'soil': 17},
-    '192.168.0.199': {'dht22': 4, 'soil': 17},
-    '192.168.0.200': {'dht22': 4, 'soil': 17},
+    "192.168.0.163": {"dht22": 4, "soil": 17},
+    "192.168.0.199": {"dht22": 4, "soil": 17},
+    "192.168.0.200": {"dht22": 4, "soil": 17},
 }
 
 
 def compute_merkle_root(tx_hashes):
     """Return Merkle root and list of levels for given transaction hashes."""
     if not tx_hashes:
-        return '0x0', []
+        return "0x0", []
     level = tx_hashes[:]
     tree = [level]
     while len(level) > 1:
@@ -53,7 +53,7 @@ def compute_merkle_root(tx_hashes):
     return level[0], tree
 
 
-@app.route('/')
+@app.route("/")
 def index():
     nodes = list_devices()
     return render_template_string(
@@ -142,17 +142,17 @@ def index():
     )
 
 
-@app.route('/nodes')
+@app.route("/nodes")
 def nodes():
     nodes = list_devices()
-    return jsonify({'count': len(nodes), 'nodes': nodes})
+    return jsonify({"count": len(nodes), "nodes": nodes})
 
 
 def ping_node(ip: str) -> bool:
     """Return True if the given IP responds to a single ping."""
     try:
         res = subprocess.run(
-            ['ping', '-c', '1', '-W', '1', ip],
+            ["ping", "-c", "1", "-W", "1", ip],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
@@ -164,11 +164,11 @@ def ping_node(ip: str) -> bool:
 def start_blockchain():
     """Start the Fabric test network."""
     try:
-        script = Path(__file__).resolve().parent.parent / 'test_network.sh'
-        subprocess.Popen(['bash', str(script)])
-        print('Blockchain network start initiated')
+        script = Path(__file__).resolve().parent.parent / "test_network.sh"
+        subprocess.Popen(["bash", str(script)])
+        print("Blockchain network start initiated")
     except Exception as e:
-        print('Failed to start blockchain:', e)
+        print("Failed to start blockchain:", e)
 
 
 def check_and_start_blockchain():
@@ -177,38 +177,42 @@ def check_and_start_blockchain():
         start_blockchain()
 
 
-@app.route('/discover')
+@app.route("/discover")
 def discover():
     active = [ip for ip in NODE_ADDRESSES if ping_node(ip)]
-    nodes = [
-        {'ip': ip, 'sensors': NODE_SENSORS.get(ip, {})}
-        for ip in active
-    ]
-    return jsonify({'count': len(active), 'nodes': nodes})
+    nodes = [{"ip": ip, "sensors": NODE_SENSORS.get(ip, {})} for ip in active]
+    return jsonify({"count": len(active), "nodes": nodes})
 
-@app.route('/upload', methods=['POST'])
+
+@app.route("/upload", methods=["POST"])
 def upload_file():
-    if 'file' not in request.files:
-        return 'No file provided', 400
-    file = request.files['file']
+    if "file" not in request.files:
+        return "No file provided", 400
+    file = request.files["file"]
     res = client.add(file)
-    cid = res['Hash']
+    cid = res["Hash"]
     # Record the CID on the blockchain (stub implementation)
-    record_sensor_data(id=file.filename, temperature=0, humidity=0,
-                       timestamp=datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'), cid=cid)
-    return jsonify({'cid': cid})
+    record_sensor_data(
+        id=file.filename,
+        temperature=0,
+        humidity=0,
+        timestamp=datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        cid=cid,
+    )
+    return jsonify({"cid": cid})
 
 
-@app.route('/register', methods=['POST'])
+@app.route("/register", methods=["POST"])
 def register():
     data = request.get_json()
-    if not data or 'id' not in data or 'owner' not in data:
-        return 'Invalid JSON', 400
-    register_device(data['id'], data['owner'])
+    if not data or "id" not in data or "owner" not in data:
+        return "Invalid JSON", 400
+    register_device(data["id"], data["owner"])
     check_and_start_blockchain()
-    return 'registered'
+    return "registered"
 
-@app.route('/retrieve/<cid>', methods=['GET'])
+
+@app.route("/retrieve/<cid>", methods=["GET"])
 def retrieve_file(cid):
     try:
         data = client.cat(cid)
@@ -217,65 +221,67 @@ def retrieve_file(cid):
         return str(e), 500
 
 
-@app.route('/verify/<sensor_id>', methods=['GET'])
+@app.route("/verify/<sensor_id>", methods=["GET"])
 def verify(sensor_id):
     data = get_sensor_data(sensor_id)
-    cid = data['cid'] if data else None
+    cid = data["cid"] if data else None
     if not cid:
-        return 'No sensor data found', 404
+        return "No sensor data found", 404
     content = client.cat(cid)
     new_cid = client.add_bytes(content)
     if new_cid == cid:
-        return 'Data integrity verified'
-    return 'Data integrity check failed', 500
+        return "Data integrity verified"
+    return "Data integrity check failed", 500
 
 
-@app.route('/recover/<sensor_id>', methods=['GET'])
+@app.route("/recover/<sensor_id>", methods=["GET"])
 def recover(sensor_id):
     data = get_sensor_data(sensor_id)
     if not data:
-        return 'No sensor data found', 404
-    cid = data['cid']
+        return "No sensor data found", 404
+    cid = data["cid"]
     content = client.cat(cid)
     new_cid = client.add_bytes(content)
     if new_cid == cid:
-        return 'Recovery successful'
-    return jsonify({'old_cid': cid, 'new_cid': new_cid})
+        return "Recovery successful"
+    return jsonify({"old_cid": cid, "new_cid": new_cid})
 
 
-@app.route('/merkle/<int:block_num>')
+@app.route("/merkle/<int:block_num>")
 def merkle(block_num: int):
     """Return Merkle tree information for a block."""
     block = get_block(block_num)
     tx_hashes = [
         hashlib.sha256(json.dumps(tx).encode()).hexdigest()
-        for tx in block.get('data', [])
+        for tx in block.get("data", [])
     ]
     root, tree = compute_merkle_root(tx_hashes)
-    return jsonify({'root': root, 'tree': tree})
+    return jsonify({"root": root, "tree": tree})
 
-@app.route('/sensor', methods=['POST'])
+
+@app.route("/sensor", methods=["POST"])
 def record_sensor():
     if request.is_json:
         data = request.get_json()
     else:
         data = request.form.to_dict()
     if not data:
-        return 'Invalid payload', 400
-    data['node_ip'] = request.remote_addr
-    data['timestamp'] = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-    js = json.dumps(data).encode('utf-8')
+        return "Invalid payload", 400
+    data["node_ip"] = request.remote_addr
+    data["timestamp"] = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    js = json.dumps(data).encode("utf-8")
     ipfs_res = client.add_bytes(js)
     cid = ipfs_res
     record_sensor_data(
-        data.get('id', 'unknown'),
-        float(data.get('temperature', 0)),
-        float(data.get('humidity', 0)),
-        data['timestamp'],
+        data.get("id", "unknown"),
+        float(data.get("temperature", 0)),
+        float(data.get("humidity", 0)),
+        data["timestamp"],
         cid,
     )
-    return jsonify({'cid': cid})
+    return jsonify({"cid": cid})
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     # Requires cert.pem and key.pem for TLS
-    app.run(host='0.0.0.0', port=8443, ssl_context=('cert.pem', 'key.pem'))
+    app.run(host="0.0.0.0", port=8443, ssl_context=("cert.pem", "key.pem"))

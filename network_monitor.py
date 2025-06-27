@@ -8,7 +8,7 @@ from flask_app.hlf_client import log_event
 
 class DummyLoRa:
     def receive(self) -> bytes:
-        return b''
+        return b""
 
 
 lora = DummyLoRa()
