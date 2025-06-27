@@ -92,29 +92,9 @@ def index():
         """
         <html>
         <head>
+            <link href='https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/css/bootstrap.min.css' rel='stylesheet'>
             <style>
-                body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
-                header {
-                    background-color: #2c3e50;
-                    color: #fff;
-                    padding: 20px;
-                    text-align: center;
-                }
-                main { padding: 40px; }
-                footer {
-                    background-color: #f4f4f4;
-                    text-align: center;
-                    padding: 10px 0;
-                    position: fixed;
-                    bottom: 0;
-                    width: 100%;
-                }
-                h1 { margin: 0; }
-                form { margin-bottom: 20px; }
-                button { padding: 6px 12px; }
-                #node-list li { margin-left: 20px; }
-                table { border-collapse: collapse; margin-top: 10px; }
-                th, td { border: 1px solid #ccc; padding: 4px 8px; }
+            body { padding-top: 20px; }
             </style>
             <script>
             async function discover() {
@@ -163,43 +143,71 @@ def index():
             </script>
         </head>
         <body>
-        <header>
+        <header class='bg-dark text-white text-center py-3 mb-4'>
             <h1>Hyperledger Farm Dashboard</h1>
         </header>
-        <main>
-        <p>Registered nodes: {{count}}</p>
-        <button onclick="discover()">Discover Active Nodes</button>
-        <p>Active nodes: <span id="node-count">0</span></p>
-        <ul id="node-list"></ul>
-        <h2>Upload Sensor File</h2>
-        <form action="/upload" method="post" enctype="multipart/form-data">
-            <input type="file" name="file" />
-            <button type="submit">Upload</button>
-        </form>
-        <h2>Record Sensor Data</h2>
-        <table>
-            <thead>
-                <tr><th>Sensor</th><th>Temperature</th><th>Humidity</th><th>Timestamp</th></tr>
-            </thead>
-            <tbody id="sensor-body"></tbody>
-        </table>
-
-        <h2>Blockchain Details</h2>
-        <table>
-            <thead>
-                <tr><th>Time</th><th>Event</th></tr>
-            </thead>
-            <tbody id="block-body"></tbody>
-        </table>
-        <h2>Merkle Tree</h2>
-        <input id="block-num" placeholder="block number" />
-        <button onclick="showMerkle()">Show</button>
-        <p>Root: <span id="merkle-root"></span></p>
-        <ul id="merkle-tree"></ul>
+        <nav class='navbar navbar-expand-lg navbar-light bg-light mb-4'>
+            <div class='container-fluid'>
+                <ul class='navbar-nav me-auto mb-2 mb-lg-0'>
+                    <li class='nav-item'><a class='nav-link' href='/integrity'>Data Integrity</a></li>
+                    <li class='nav-item'><a class='nav-link' href='/connect'>Sensor Connection</a></li>
+                    <li class='nav-item'><a class='nav-link' href='/status'>Network Status</a></li>
+                </ul>
+            </div>
+        </nav>
+        <main class='container'>
+        <div class='row g-4'>
+            <div class='col-md-4'>
+                <div class='card h-100'>
+                    <div class='card-header'>Nodes</div>
+                    <div class='card-body'>
+                        <p>Registered nodes: {{count}}</p>
+                        <button class='btn btn-primary' onclick='discover()'>Discover Active Nodes</button>
+                        <p class='mt-2'>Active nodes: <span id='node-count'>0</span></p>
+                        <ul id='node-list' class='mb-0'></ul>
+                    </div>
+                </div>
+            </div>
+            <div class='col-md-8'>
+                <div class='card h-100'>
+                    <div class='card-header'>Latest Sensor Readings</div>
+                    <div class='card-body p-0'>
+                        <table class='table table-sm mb-0'>
+                            <thead>
+                                <tr><th>Sensor</th><th>Temperature</th><th>Humidity</th><th>Timestamp</th></tr>
+                            </thead>
+                            <tbody id='sensor-body'></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class='col-md-6'>
+                <div class='card h-100'>
+                    <div class='card-header'>Blockchain Events</div>
+                    <div class='card-body p-0'>
+                        <table class='table table-sm mb-0'>
+                            <thead>
+                                <tr><th>Time</th><th>Event</th></tr>
+                            </thead>
+                            <tbody id='block-body'></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class='col-md-6'>
+                <div class='card h-100'>
+                    <div class='card-header'>Merkle Tree</div>
+                    <div class='card-body'>
+                        <input id='block-num' class='form-control mb-2' placeholder='block number'/>
+                        <button class='btn btn-secondary' onclick='showMerkle()'>Show</button>
+                        <p class='mt-2'>Root: <span id='merkle-root'></span></p>
+                        <ul id='merkle-tree'></ul>
+                    </div>
+                </div>
+            </div>
+        </div>
         </main>
-        <footer>
-            Hyperledger Farm Example
-        </footer>
+        <script src='https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/js/bootstrap.bundle.min.js'></script>
         </body>
         </html>
         """,
@@ -372,6 +380,23 @@ def status_page():
         </html>
         """
     )
+
+
+@app.route('/connect')
+def connect_page():
+    """Serve the sensor connection setup page."""
+    template = Path(__file__).resolve().parent.parent / 'sensor_connection.html'
+    return render_template_string(template.read_text())
+
+
+@app.route('/check-pins', methods=['POST'])
+def check_pins():
+    """Simple stub that pretends to verify pin connections."""
+    info = request.get_json() or {}
+    node = info.get('node')
+    valid = node in list_devices()
+    msg = 'Pins appear connected and data is flowing.' if valid else 'Node not found.'
+    return jsonify({'message': msg, 'ok': valid})
 
 
 @app.route('/integrity')

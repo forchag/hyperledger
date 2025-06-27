@@ -8,6 +8,11 @@
 <body class="bg-light">
   <div class="container py-4">
   <h1 class="mb-3">Connect Sensors to Your Node</h1>
+  <div class="mb-3">
+    <label class="form-label">Select Node
+      <select id="node-select" class="form-select"></select>
+    </label>
+  </div>
   <p class="mb-4">This page explains how to attach common sensors to a Raspberry Pi-based node. Select the GPIO pin used for each sensor and note the metric each sensor provides.</p>
 
   <div id="saveMsg" class="alert alert-success d-none" role="alert"></div>
@@ -110,6 +115,8 @@
 
     <div class="col-12">
       <button type="submit" class="btn btn-primary">Save Configuration</button>
+      <button id="check-btn" type="button" class="btn btn-secondary ms-2">Check Connection</button>
+      <span id="check-result" class="ms-3"></span>
     </div>
   </form>
 
@@ -117,6 +124,13 @@
   </div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/js/bootstrap.bundle.min.js"></script>
   <script>
+    async function loadNodes(){
+      const res = await fetch('/nodes');
+      const data = await res.json();
+      const select = document.getElementById('node-select');
+      select.innerHTML = data.nodes.map(n => `<option value="${n}">${n}</option>`).join('');
+    }
+
     document.getElementById('sensor-form').addEventListener('submit', function(e) {
       e.preventDefault();
       const msg = document.getElementById('saveMsg');
@@ -124,6 +138,26 @@
       msg.classList.remove('d-none');
       setTimeout(() => msg.classList.add('d-none'), 3000);
     });
+
+    document.getElementById('check-btn').addEventListener('click', async () => {
+      const pins = {
+        dht22: document.querySelector('[name="dht22_pin"]').value,
+        soil: document.querySelector('[name="soil_pin"]').value,
+        ph: document.querySelector('[name="ph_pin"]').value,
+        light: document.querySelector('[name="light_pin"]').value,
+        water: document.querySelector('[name="water_pin"]').value
+      };
+      const node = document.getElementById('node-select').value;
+      const res = await fetch('/check-pins', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({node, pins})
+      });
+      const data = await res.json();
+      document.getElementById('check-result').textContent = data.message;
+    });
+
+    window.onload = loadNodes;
   </script>
 </body>
 </html>
