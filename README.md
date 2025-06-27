@@ -11,6 +11,19 @@ This directory contains a minimal example of integrating Hyperledger Fabric with
 * Logging network events
 * Sending permissioned messages between devices
 
+### Starting the blockchain and smart contract
+
+Launch the local Fabric network and deploy the sensor chaincode using the
+included helper script:
+
+```bash
+./test_network.sh
+```
+
+The script downloads the Fabric samples if needed, starts the test network and
+activates the `sensor` smart contract so other tools can interact with the
+blockchain.
+
 ## Flask GUI
 
 `flask_app/app.py` exposes a small HTTPS GUI and REST API to register devices, upload files, record sensor data and verify stored information. It expects a local IPFS daemon running on `localhost:5001` and a Fabric gateway configured via the stub `hlf_client` module. The dashboard shows how many nodes are registered and offers options to verify and recover data stored on IPFS.
