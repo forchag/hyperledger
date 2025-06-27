@@ -20,8 +20,9 @@ included helper script:
 ./test_network.sh
 ```
 
-The script downloads the Fabric samples if needed, starts the test network and
-activates the `sensor` smart contract so other tools can interact with the
+The script downloads the Fabric samples if needed, shuts down any previous
+instance of the network, then starts the test network and activates the
+`sensor` smart contract so other tools can interact with the
 blockchain.
 
 ## Flask GUI
@@ -83,7 +84,9 @@ The instructions below walk through a complete setup on a small Raspberry Pi clu
    ```bash
    ./test_network.sh
    ```
-   The script automatically changes into `fabric-samples/test-network`, brings up the Fabric network and deploys the `sensor` chaincode.
+   The script automatically changes into `fabric-samples/test-network`,
+   stops any running instance of the test network, then brings up a fresh
+   network and deploys the `sensor` chaincode.
 
 5. **Start supporting services**
    Open a new terminal and run the IPFS daemon:

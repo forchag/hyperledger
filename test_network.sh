@@ -11,6 +11,9 @@ fi
 
 cd fabric-samples/test-network
 
+# Ensure any previous test network is removed to prevent channel conflicts
+./network.sh down
+
 # Start the network and create a channel
 ./network.sh up createChannel -ca
 
@@ -18,4 +21,3 @@ cd fabric-samples/test-network
 cp -r ../../chaincode/sensor ./chaincode/
 ./network.sh deployCC -ccn sensor -ccp ./chaincode/sensor -ccl go
 
-echo "Fabric test network started with sensor chaincode deployed."
