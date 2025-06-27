@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Data Integrity</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+<div class="container py-4">
+  <h1 class="mb-4">Data Integrity</h1>
+
+  <h3>Download Data</h3>
+  <form id="export-form" class="row g-2" method="get" action="/export">
+    <div class="col-md-3">
+      <input class="form-control" name="sensor_id" placeholder="sensor id (optional)">
+    </div>
+    <div class="col-md-3">
+      <input class="form-control" type="text" name="start" placeholder="start ISO timestamp">
+    </div>
+    <div class="col-md-3">
+      <input class="form-control" type="text" name="end" placeholder="end ISO timestamp">
+    </div>
+    <div class="col-md-2">
+      <button type="submit" class="btn btn-primary">Download CSV</button>
+    </div>
+  </form>
+
+  <hr>
+  <h3>Verify Data</h3>
+  <form id="verify-form" class="row g-2" enctype="multipart/form-data">
+    <div class="col-md-3">
+      <input class="form-control" name="sensor_id" placeholder="sensor id (optional)">
+    </div>
+    <div class="col-md-3">
+      <input class="form-control" type="text" name="start" placeholder="start ISO timestamp">
+    </div>
+    <div class="col-md-3">
+      <input class="form-control" type="text" name="end" placeholder="end ISO timestamp">
+    </div>
+    <div class="col-md-3">
+      <input class="form-control" type="file" name="file" required>
+    </div>
+    <div class="col-md-2">
+      <button type="submit" class="btn btn-success">Verify</button>
+    </div>
+  </form>
+  <div id="verify-result" class="mt-3"></div>
+</div>
+<script>
+  document.getElementById('verify-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const data = new FormData(form);
+    const res = await fetch('/verify-data', {method: 'POST', body: data});
+    const out = await res.json();
+    const div = document.getElementById('verify-result');
+    if(out.verified){
+      div.innerHTML = '<div class="alert alert-success">Data verified</div>';
+    } else {
+      div.innerHTML = '<div class="alert alert-danger">Data does not match</div>';
+    }
+  });
+</script>
+</body>
+</html>

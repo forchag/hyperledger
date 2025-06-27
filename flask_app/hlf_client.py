@@ -7,20 +7,22 @@
 # Keep a simple in-memory registry of devices so that the Flask app can
 # demonstrate interactions with multiple nodes without a real Fabric backend.
 DEVICES = []
+# Mapping of sensor ID to a list of recorded readings
 SENSOR_DATA = {}
 INCIDENTS = []
 ATTESTATIONS = []
 
 
 def record_sensor_data(id, temperature, humidity, timestamp, cid):
-    """Submit RecordSensorData transaction."""
-    SENSOR_DATA[id] = {
+    """Submit RecordSensorData transaction and keep a history of readings."""
+    entry = {
         'id': id,
         'temperature': temperature,
         'humidity': humidity,
         'timestamp': timestamp,
         'cid': cid,
     }
+    SENSOR_DATA.setdefault(id, []).append(entry)
     print(f"[HLF] record {id} {temperature} {humidity} {timestamp} {cid}")
 
 def register_device(id, owner):
@@ -71,9 +73,30 @@ def get_incidents():
 
 
 def get_sensor_data(sensor_id):
-    """Retrieve sensor metadata from the ledger."""
+    """Retrieve the latest sensor metadata for the given device."""
     print(f"[HLF] query sensor data for {sensor_id}")
-    return SENSOR_DATA.get(sensor_id)
+    records = SENSOR_DATA.get(sensor_id)
+    if not records:
+        return None
+    return records[-1]
+
+
+def get_sensor_history(sensor_id, start=None, end=None):
+    """Return all recorded readings for a device optionally filtered by date."""
+    records = SENSOR_DATA.get(sensor_id, [])
+    if start:
+        records = [r for r in records if r['timestamp'] >= start]
+    if end:
+        records = [r for r in records if r['timestamp'] <= end]
+    return records
+
+
+def get_all_sensor_data(start=None, end=None):
+    """Return readings for all devices."""
+    result = []
+    for dev in DEVICES:
+        result.extend(get_sensor_history(dev, start, end))
+    return result
 
 
 def query_blockchain_info():
