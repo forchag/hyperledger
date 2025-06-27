@@ -6,6 +6,18 @@
   <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body class="bg-light">
+  <header class="bg-dark text-white text-center py-3 mb-4">
+    <h1>Hyperledger Farm Dashboard</h1>
+  </header>
+  <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4">
+    <div class="container-fluid">
+      <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+        <li class="nav-item"><a class="nav-link" href="/integrity">Data Integrity</a></li>
+        <li class="nav-item"><a class="nav-link" href="/connect">Sensor Connection</a></li>
+        <li class="nav-item"><a class="nav-link" href="/status">Network Status</a></li>
+      </ul>
+    </div>
+  </nav>
   <div class="container py-4">
   <h1 class="mb-3">Connect Sensors to Your Node</h1>
   <div class="mb-3">
@@ -125,10 +137,10 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/js/bootstrap.bundle.min.js"></script>
   <script>
     async function loadNodes(){
-      const res = await fetch('/nodes');
+      const res = await fetch('/discover');
       const data = await res.json();
       const select = document.getElementById('node-select');
-      select.innerHTML = data.nodes.map(n => `<option value="${n}">${n}</option>`).join('');
+      select.innerHTML = data.nodes.map(n => `<option value="${n.ip}">${n.ip}</option>`).join('');
     }
 
     document.getElementById('sensor-form').addEventListener('submit', function(e) {
