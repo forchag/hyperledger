@@ -54,6 +54,11 @@ def attest_device(device_id, status, timestamp):
     print(f"[HLF] attestation {device_id} {status} {timestamp}")
 
 
+def get_attestations():
+    """Return recorded device attestations."""
+    return ATTESTATIONS
+
+
 def list_devices():
     """Return a list of registered device IDs."""
     # This would normally query the ledger. We return the in-memory list.
@@ -105,3 +110,8 @@ def quarantine_device(device_id):
 def is_quarantined(device_id):
     """Return True if the device is quarantined."""
     return device_id in QUARANTINED
+
+
+def get_quarantined():
+    """Return a list of quarantined device IDs."""
+    return list(QUARANTINED)

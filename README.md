@@ -157,3 +157,9 @@ security incident on the blockchain using the `LogSecurityIncident`
 chaincode function. `incident_responder.py` watches the ledger for such
 events and automatically quarantines affected devices via the stubbed
 `hlf_client` API.
+
+The Flask dashboard also exposes a `/status` page showing the number of
+recorded security incidents and how many devices are currently quarantined.
+This information is refreshed live from the in-memory data maintained by
+`hlf_client` while `incident_responder` runs in the background when the
+web server starts.
