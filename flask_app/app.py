@@ -33,6 +33,9 @@ from incident_responder import watch as incident_watch
 app = Flask(__name__)
 client = ipfshttpclient.connect('/dns/localhost/tcp/5001/http')
 
+# Track whether the Fabric network has been started
+BLOCKCHAIN_STARTED = False
+
 # Potential Raspberry Pi addresses to probe when discovering active nodes
 NODE_ADDRESSES = [
     '192.168.0.163',
@@ -133,6 +136,16 @@ def index():
                 ).join('');
                 document.getElementById('block-body').innerHTML = rows;
             }
+            async function startChain(){
+                const res = await fetch('/start-blockchain', {method:'POST'});
+                const data = await res.json();
+                document.getElementById('chain-result').textContent = data.checks.map(c => (c.ok ? '[\u2713] ' : '[x] ') + c.check).join('\n');
+            }
+            async function restartChain(){
+                const res = await fetch('/restart-blockchain', {method:'POST'});
+                const data = await res.json();
+                document.getElementById('chain-result').textContent = data.checks.map(c => (c.ok ? '[\u2713] ' : '[x] ') + c.check).join('\n');
+            }
             function startPolling() {
                 loadReadings();
                 loadBlocks();
@@ -165,6 +178,16 @@ def index():
                         <button class='btn btn-primary' onclick='discover()'>Discover Active Nodes</button>
                         <p class='mt-2'>Active nodes: <span id='node-count'>0</span></p>
                         <ul id='node-list' class='mb-0'></ul>
+                    </div>
+                </div>
+            </div>
+            <div class='col-md-4'>
+                <div class='card h-100'>
+                    <div class='card-header'>Blockchain Control</div>
+                    <div class='card-body'>
+                        <button class='btn btn-success mb-2' onclick='startChain()'>Start Blockchain</button>
+                        <button class='btn btn-warning' onclick='restartChain()'>Restart Blockchain</button>
+                        <pre id='chain-result' class='mt-2'></pre>
                     </div>
                 </div>
             </div>
@@ -233,6 +256,18 @@ def block_events():
     return jsonify({'events': get_block_events()})
 
 
+@app.route('/start-blockchain', methods=['POST'])
+def start_blockchain_route():
+    checks, started = start_blockchain()
+    return jsonify({'started': started, 'checks': checks})
+
+
+@app.route('/restart-blockchain', methods=['POST'])
+def restart_blockchain_route():
+    checks, started = restart_blockchain()
+    return jsonify({'started': started, 'checks': checks})
+
+
 def ping_node(ip: str) -> bool:
     """Return True if the given IP responds to a single ping."""
     try:
@@ -246,14 +281,52 @@ def ping_node(ip: str) -> bool:
         return False
 
 
+def run_system_checks():
+    """Perform basic environment checks before starting Fabric."""
+    checks = []
+
+    def _check(cmd, msg):
+        try:
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+            checks.append({'check': msg, 'ok': True})
+        except Exception:
+            checks.append({'check': msg, 'ok': False})
+
+    _check(['docker', '--version'], 'Docker installed')
+    _check(['docker-compose', '--version'], 'Docker Compose installed')
+    _check(['curl', '--version'], 'curl available')
+    return checks
+
+
 def start_blockchain():
-    """Start the Fabric test network."""
+    """Run checks and start the Fabric test network."""
+    global BLOCKCHAIN_STARTED
+    checks = run_system_checks()
+    if not all(c['ok'] for c in checks):
+        return checks, False
+    if BLOCKCHAIN_STARTED:
+        return checks, True
     try:
         script = Path(__file__).resolve().parent.parent / 'test_network.sh'
         subprocess.Popen(['bash', str(script)])
+        BLOCKCHAIN_STARTED = True
         print('Blockchain network start initiated')
+        return checks, True
     except Exception as e:
         print('Failed to start blockchain:', e)
+        return checks, False
+
+
+def restart_blockchain():
+    """Stop the network and start it again."""
+    global BLOCKCHAIN_STARTED
+    try:
+        net_dir = Path(__file__).resolve().parent.parent / 'fabric-samples' / 'test-network'
+        subprocess.run(['bash', 'network.sh', 'down'], cwd=net_dir)
+    except Exception:
+        pass
+    BLOCKCHAIN_STARTED = False
+    return start_blockchain()
 
 
 def check_and_start_blockchain():
@@ -394,7 +467,7 @@ def check_pins():
     """Simple stub that pretends to verify pin connections."""
     info = request.get_json() or {}
     node = info.get('node')
-    valid = node in list_devices()
+    valid = node in list_devices() or ping_node(node)
     msg = 'Pins appear connected and data is flowing.' if valid else 'Node not found.'
     return jsonify({'message': msg, 'ok': valid})
 
