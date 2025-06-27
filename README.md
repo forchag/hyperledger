@@ -14,6 +14,9 @@ This directory contains a minimal example of integrating Hyperledger Fabric with
 ## Flask GUI
 
 `flask_app/app.py` exposes a small HTTPS GUI and REST API to register devices, upload files, record sensor data and verify stored information. It expects a local IPFS daemon running on `localhost:5001` and a Fabric gateway configured via the stub `hlf_client` module. The dashboard shows how many nodes are registered and offers options to verify and recover data stored on IPFS.
+An additional page available at `/integrity` lets administrators export sensor
+data as CSV and verify uploaded datasets against the hashes stored on the
+blockchain.
 
 Start the app with:
 

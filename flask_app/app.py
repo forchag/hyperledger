@@ -1,10 +1,11 @@
-from flask import Flask, request, jsonify, render_template_string
+from flask import Flask, request, jsonify, render_template_string, make_response
 import ipfshttpclient
 import json
 from datetime import datetime
 import subprocess
 import hashlib
 from pathlib import Path
+import io
 
 # Placeholder for Hyperledger Fabric client imports
 from hlf_client import (
@@ -12,6 +13,8 @@ from hlf_client import (
     register_device,
     log_event,
     get_sensor_data,
+    get_sensor_history,
+    get_all_sensor_data,
     list_devices,
     get_block,
     get_incidents,
@@ -59,6 +62,24 @@ def compute_merkle_root(tx_hashes):
         level = next_level
         tree.append(level)
     return level[0], tree
+
+
+def build_csv(sensor_id=None, start=None, end=None):
+    """Return CSV bytes and SHA256 hash for the requested data."""
+    import csv
+    if sensor_id:
+        records = get_sensor_history(sensor_id, start, end)
+    else:
+        records = get_all_sensor_data(start, end)
+    records.sort(key=lambda r: r['timestamp'])
+    out = io.StringIO()
+    writer = csv.DictWriter(out, fieldnames=['id', 'temperature', 'humidity', 'timestamp', 'cid'])
+    writer.writeheader()
+    for r in records:
+        writer.writerow(r)
+    data = out.getvalue().encode('utf-8')
+    h = hashlib.sha256(data).hexdigest()
+    return data, h
 
 
 @app.route('/')
@@ -303,6 +324,39 @@ def status_page():
         </html>
         """
     )
+
+
+@app.route('/integrity')
+def integrity_page():
+    """Serve the data integrity management page."""
+    template = Path(__file__).resolve().parent.parent / 'data_integrity.html'
+    return render_template_string(template.read_text())
+
+
+@app.route('/export')
+def export_data():
+    sensor_id = request.args.get('sensor_id')
+    start = request.args.get('start')
+    end = request.args.get('end')
+    data, h = build_csv(sensor_id, start, end)
+    resp = make_response(data)
+    resp.headers['Content-Type'] = 'text/csv'
+    resp.headers['Content-Disposition'] = 'attachment; filename="sensor_data.csv"'
+    resp.headers['X-Data-Hash'] = h
+    return resp
+
+
+@app.route('/verify-data', methods=['POST'])
+def verify_data():
+    sensor_id = request.form.get('sensor_id')
+    start = request.form.get('start')
+    end = request.form.get('end')
+    if 'file' not in request.files:
+        return 'no file', 400
+    uploaded = request.files['file'].read()
+    uploaded_hash = hashlib.sha256(uploaded).hexdigest()
+    _, expected_hash = build_csv(sensor_id, start, end)
+    return jsonify({'verified': uploaded_hash == expected_hash})
 
 @app.route('/sensor', methods=['POST'])
 def record_sensor():
