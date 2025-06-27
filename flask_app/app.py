@@ -14,7 +14,15 @@ from hlf_client import (
     get_sensor_data,
     list_devices,
     get_block,
+    get_incidents,
+    get_quarantined,
+    get_attestations,
+    log_security_incident,
+    attest_device,
 )
+
+import threading
+from incident_responder import watch as incident_watch
 
 app = Flask(__name__)
 client = ipfshttpclient.connect('/dns/localhost/tcp/5001/http')
@@ -254,6 +262,48 @@ def merkle(block_num: int):
     root, tree = compute_merkle_root(tx_hashes)
     return jsonify({'root': root, 'tree': tree})
 
+
+@app.route('/status-data')
+def status_data():
+    """Return incidents and quarantine information."""
+    return jsonify({
+        'incidents': get_incidents(),
+        'quarantined': get_quarantined(),
+        'attestations': get_attestations(),
+    })
+
+
+@app.route('/status')
+def status_page():
+    """Display current incidents and quarantine status."""
+    return render_template_string(
+        """
+        <html>
+        <head>
+            <style>
+            body { font-family: Arial, sans-serif; padding: 20px; }
+            h1 { color: #2c3e50; }
+            .counter { font-size: 1.2em; margin-bottom: 10px; }
+            </style>
+            <script>
+            async function load() {
+                const res = await fetch('/status-data');
+                const data = await res.json();
+                document.getElementById('incident-count').innerText = data.incidents.length;
+                document.getElementById('quarantine-count').innerText = data.quarantined.length;
+            }
+            window.onload = load;
+            </script>
+        </head>
+        <body>
+            <h1>Network Status</h1>
+            <div class="counter">Incidents: <span id="incident-count">0</span></div>
+            <div class="counter">Quarantined devices: <span id="quarantine-count">0</span></div>
+        </body>
+        </html>
+        """
+    )
+
 @app.route('/sensor', methods=['POST'])
 def record_sensor():
     if request.is_json:
@@ -277,5 +327,8 @@ def record_sensor():
     return jsonify({'cid': cid})
 
 if __name__ == '__main__':
+    # Start background watcher for incidents
+    t = threading.Thread(target=incident_watch, daemon=True)
+    t.start()
     # Requires cert.pem and key.pem for TLS
     app.run(host='0.0.0.0', port=8443, ssl_context=('cert.pem', 'key.pem'))
