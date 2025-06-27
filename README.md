@@ -148,3 +148,12 @@ python tools/block_inspector.py --block 2
 The inspector prints the block header including `previous_hash` and
 `data_hash`, allowing you to differentiate one block from another and
 view the stored transactions.
+
+## Security monitoring
+
+`threat_detection.py` continuously checks recent sensor readings for
+abnormal values. When it detects suspicious behaviour it records a
+security incident on the blockchain using the `LogSecurityIncident`
+chaincode function. `incident_responder.py` watches the ledger for such
+events and automatically quarantines affected devices via the stubbed
+`hlf_client` API.

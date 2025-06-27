@@ -29,6 +29,20 @@ type NetworkEvent struct {
     Timestamp string `json:"timestamp"`
 }
 
+// SecurityIncident represents a detected security issue for a device.
+type SecurityIncident struct {
+    DeviceID    string `json:"device_id"`
+    Description string `json:"description"`
+    Timestamp   string `json:"timestamp"`
+}
+
+// Attestation contains an attestation result for a device.
+type Attestation struct {
+    DeviceID  string `json:"device_id"`
+    Status    string `json:"status"`
+    Timestamp string `json:"timestamp"`
+}
+
 func (s *SmartContract) InitLedger(ctx contractapi.TransactionContextInterface) error {
     return nil
 }
@@ -116,6 +130,42 @@ func (s *SmartContract) SendMessage(ctx contractapi.TransactionContextInterface,
         return err
     }
     key := fmt.Sprintf("MSG%s_%s_%s", from, to, timestamp)
+    return ctx.GetStub().PutState(key, bytes)
+}
+
+// LogSecurityIncident stores a security incident on the ledger.
+func (s *SmartContract) LogSecurityIncident(ctx contractapi.TransactionContextInterface, deviceID string, desc string, timestamp string) error {
+    exists, err := s.deviceExists(ctx, deviceID)
+    if err != nil {
+        return err
+    }
+    if !exists {
+        return fmt.Errorf("device not registered")
+    }
+    incident := SecurityIncident{DeviceID: deviceID, Description: desc, Timestamp: timestamp}
+    bytes, err := json.Marshal(incident)
+    if err != nil {
+        return err
+    }
+    key := fmt.Sprintf("SEC%s_%s", deviceID, timestamp)
+    return ctx.GetStub().PutState(key, bytes)
+}
+
+// RecordAttestation records an attestation result on the ledger.
+func (s *SmartContract) RecordAttestation(ctx contractapi.TransactionContextInterface, deviceID string, status string, timestamp string) error {
+    exists, err := s.deviceExists(ctx, deviceID)
+    if err != nil {
+        return err
+    }
+    if !exists {
+        return fmt.Errorf("device not registered")
+    }
+    att := Attestation{DeviceID: deviceID, Status: status, Timestamp: timestamp}
+    bytes, err := json.Marshal(att)
+    if err != nil {
+        return err
+    }
+    key := fmt.Sprintf("ATT%s_%s", deviceID, timestamp)
     return ctx.GetStub().PutState(key, bytes)
 }
 
