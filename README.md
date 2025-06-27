@@ -132,6 +132,18 @@ Sensor readings and heartbeat events are submitted through chaincode
 committed to all peers. Clients can query the ledger to retrieve device
 information or verify data integrity.
 
+### Block characteristics
+
+Blocks in the default test network are cut when either 10 transactions
+accumulate or about two seconds pass.  A block typically stays under
+2&nbsp;MB in size but the absolute maximum is 10&nbsp;MB.  Every
+transaction is hashed with **SHA-256** before inclusion and the block
+header stores the Merkle root of all transaction hashes.  Communication
+between nodes is protected with TLS but the on-disk ledger itself is not
+encrypted.  Because only a small transaction descriptor is stored on the
+ledger, roughly a few hundred sensor events comfortably fit into a
+single block.
+
 ### Inspecting and verifying blocks
 
 The Fabric CLI can display high level ledger information:
@@ -166,3 +178,14 @@ recorded security incidents and how many devices are currently quarantined.
 This information is refreshed live from the in-memory data maintained by
 `hlf_client` while `incident_responder` runs in the background when the
 web server starts.
+
+## Data storage and recovery
+
+Sensor payloads are written to **IPFS**, giving each reading a content
+identifier (CID).  Only the CID and basic metadata are kept on the
+blockchain.  Every node can pin those CIDs to locally replicate the
+actual sensor files.  If a device or IPFS node fails, another node can
+retrieve the CIDs from the ledger and pin the data again.  The script
+`tools/node_recovery.py` automates this process for a freshly started
+node.  Once the historical CIDs are pinned the node continues to store
+new sensor data just like its peers.

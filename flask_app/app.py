@@ -15,6 +15,7 @@ from hlf_client import (
     get_sensor_data,
     get_sensor_history,
     get_all_sensor_data,
+    get_state_on,
     list_devices,
     get_block,
     get_incidents,
@@ -344,6 +345,13 @@ def export_data():
     resp.headers['Content-Disposition'] = 'attachment; filename="sensor_data.csv"'
     resp.headers['X-Data-Hash'] = h
     return resp
+
+
+@app.route('/state/<date>')
+def state_on(date):
+    """Return the last reading for each node on the given YYYY-MM-DD date."""
+    info = get_state_on(date)
+    return jsonify(info)
 
 
 @app.route('/verify-data', methods=['POST'])

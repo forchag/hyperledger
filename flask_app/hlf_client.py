@@ -99,6 +99,18 @@ def get_all_sensor_data(start=None, end=None):
     return result
 
 
+def get_state_on(date: str):
+    """Return the last recorded reading for each device on the given YYYY-MM-DD date."""
+    result = {}
+    start = date + "T00:00:00Z"
+    end = date + "T23:59:59Z"
+    for dev in DEVICES:
+        records = get_sensor_history(dev, start, end)
+        if records:
+            result[dev] = records[-1]
+    return result
+
+
 def query_blockchain_info():
     """Return basic ledger info such as height and current block hash."""
     print("[HLF] query blockchain info")
