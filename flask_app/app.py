@@ -16,11 +16,13 @@ from hlf_client import (
     get_sensor_history,
     get_all_sensor_data,
     get_state_on,
+    get_latest_readings,
     list_devices,
     get_block,
     get_incidents,
     get_quarantined,
     get_attestations,
+    get_block_events,
     log_security_incident,
     attest_device,
 )
@@ -111,6 +113,8 @@ def index():
                 form { margin-bottom: 20px; }
                 button { padding: 6px 12px; }
                 #node-list li { margin-left: 20px; }
+                table { border-collapse: collapse; margin-top: 10px; }
+                th, td { border: 1px solid #ccc; padding: 4px 8px; }
             </style>
             <script>
             async function discover() {
@@ -133,6 +137,29 @@ def index():
                 const levels = data.tree.map(l => '<li>' + l.join(', ') + '</li>').join('');
                 document.getElementById('merkle-tree').innerHTML = levels;
             }
+            async function loadReadings() {
+                const res = await fetch('/latest-readings');
+                const data = await res.json();
+                const rows = Object.entries(data).map(([id,r]) =>
+                    `<tr><td>${id}</td><td>${r.temperature}</td><td>${r.humidity}</td><td>${r.timestamp}</td></tr>`
+                ).join('');
+                document.getElementById('sensor-body').innerHTML = rows;
+            }
+            async function loadBlocks() {
+                const res = await fetch('/block-events');
+                const data = await res.json();
+                const rows = data.events.map(e =>
+                    `<tr><td>${e.time}</td><td>${e.message}</td></tr>`
+                ).join('');
+                document.getElementById('block-body').innerHTML = rows;
+            }
+            function startPolling() {
+                loadReadings();
+                loadBlocks();
+                setInterval(loadReadings, 3000);
+                setInterval(loadBlocks, 3000);
+            }
+            window.onload = startPolling;
             </script>
         </head>
         <body>
@@ -150,12 +177,20 @@ def index():
             <button type="submit">Upload</button>
         </form>
         <h2>Record Sensor Data</h2>
-        <form action="/sensor" method="post">
-            <input name="id" placeholder="sensor id" />
-            <input name="temperature" placeholder="temp" />
-            <input name="humidity" placeholder="humidity" />
-            <button type="submit">Send</button>
-        </form>
+        <table>
+            <thead>
+                <tr><th>Sensor</th><th>Temperature</th><th>Humidity</th><th>Timestamp</th></tr>
+            </thead>
+            <tbody id="sensor-body"></tbody>
+        </table>
+
+        <h2>Blockchain Details</h2>
+        <table>
+            <thead>
+                <tr><th>Time</th><th>Event</th></tr>
+            </thead>
+            <tbody id="block-body"></tbody>
+        </table>
         <h2>Merkle Tree</h2>
         <input id="block-num" placeholder="block number" />
         <button onclick="showMerkle()">Show</button>
@@ -176,6 +211,18 @@ def index():
 def nodes():
     nodes = list_devices()
     return jsonify({'count': len(nodes), 'nodes': nodes})
+
+
+@app.route('/latest-readings')
+def latest_readings():
+    """Return most recent sensor readings for all devices."""
+    return jsonify(get_latest_readings())
+
+
+@app.route('/block-events')
+def block_events():
+    """Return recent blockchain operation events."""
+    return jsonify({'events': get_block_events()})
 
 
 def ping_node(ip: str) -> bool:

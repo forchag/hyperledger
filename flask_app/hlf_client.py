@@ -1,5 +1,7 @@
 """Simple placeholder Hyperledger Fabric client."""
 
+from datetime import datetime
+
 # This file is a stub demonstrating how a client might interact with
 # a Fabric network to invoke the sensor chaincode.
 # A real implementation would use the Fabric SDK to submit transactions.
@@ -12,9 +14,34 @@ SENSOR_DATA = {}
 INCIDENTS = []
 ATTESTATIONS = []
 
+# Blockchain event log and simple block counter for demo purposes
+BLOCK_EVENTS = []
+CURRENT_BLOCK = 0
+
+
+def log_block_event(message):
+    """Record a blockchain operation event with timestamp."""
+    BLOCK_EVENTS.append({
+        'time': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'message': message,
+    })
+    # Keep last 50 events
+    if len(BLOCK_EVENTS) > 50:
+        del BLOCK_EVENTS[0]
+
+
+def get_block_events():
+    """Return recent blockchain events."""
+    return BLOCK_EVENTS
+
 
 def record_sensor_data(id, temperature, humidity, timestamp, cid):
     """Submit RecordSensorData transaction and keep a history of readings."""
+    global CURRENT_BLOCK
+    CURRENT_BLOCK += 1
+    log_block_event(f"Creating block {CURRENT_BLOCK}")
+    log_block_event(f"Hashing block {CURRENT_BLOCK}")
+    log_block_event(f"Saving block {CURRENT_BLOCK}")
     entry = {
         'id': id,
         'temperature': temperature,
@@ -96,6 +123,16 @@ def get_all_sensor_data(start=None, end=None):
     result = []
     for dev in DEVICES:
         result.extend(get_sensor_history(dev, start, end))
+    return result
+
+
+def get_latest_readings():
+    """Return the most recent reading for each device."""
+    result = {}
+    for dev in DEVICES:
+        records = SENSOR_DATA.get(dev)
+        if records:
+            result[dev] = records[-1]
     return result
 
 
