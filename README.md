@@ -59,8 +59,9 @@ heartbeat packets over LoRa using the `pySX127x` library. The companion
 and prints a list of discovered nodes every minute.
 
 `sensor_node.py` polls a DHT22, soil moisture, pH, light and water level sensor
-every few seconds, stores the data on the blockchain and can optionally forward
-the payload over LoRa. These scripts are stubs and can be run on a Raspberry Pi
+every few seconds. By default it sends the readings to the Flask API over HTTP
+but it can also transmit them over LoRa or use both channels for redundancy via
+the `--mode` option. These scripts are stubs and can be run on a Raspberry Pi
 with appropriate radio modules attached.
 
 ## Running a Fabric network locally
