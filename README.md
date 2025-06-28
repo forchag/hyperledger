@@ -268,3 +268,17 @@ retrieve the CIDs from the ledger and pin the data again.  The script
 `tools/node_recovery.py` automates this process for a freshly started
 node.  Once the historical CIDs are pinned the node continues to store
 new sensor data just like its peers.
+
+## Extended dashboard
+
+Several additional pages provide deeper insight into the running system:
+
+* **Sensor History** (`/history`) &ndash; plots past readings as an interactive chart.
+* **Blockchain Explorer** (`/explorer`) &ndash; lists recent block events.
+* **Device Management** (`/devices`) &ndash; shows devices with quarantine controls.
+* **Storage Monitor** (`/storage`) &ndash; displays stored CIDs and timestamps.
+* **Recovery Dashboard** (`/recovery`) &ndash; simulates replication of existing data.
+* **User Access Log** (`/access-log`) &ndash; exposes recent HTTP requests.
+
+These pages rely on the stubbed `hlf_client` module for demo data and are
+served by `flask_app/app.py`.

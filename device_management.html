@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Threat Detection</title>
+  <title>Device Management</title>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body class="bg-light">
@@ -15,10 +15,10 @@
         <li class="nav-item"><a class="nav-link" href="/integrity">Data Integrity</a></li>
         <li class="nav-item"><a class="nav-link" href="/connect">Sensor Connection</a></li>
         <li class="nav-item"><a class="nav-link" href="/status">Network Status</a></li>
-        <li class="nav-item"><a class="nav-link active" aria-current="page" href="/tde">Threat Detection</a></li>
+        <li class="nav-item"><a class="nav-link" href="/tde">Threat Detection</a></li>
         <li class="nav-item"><a class="nav-link" href="/history">Sensor History</a></li>
         <li class="nav-item"><a class="nav-link" href="/explorer">Blockchain Explorer</a></li>
-        <li class="nav-item"><a class="nav-link" href="/devices">Device Management</a></li>
+        <li class="nav-item"><a class="nav-link active" aria-current="page" href="/devices">Device Management</a></li>
         <li class="nav-item"><a class="nav-link" href="/storage">Storage Monitor</a></li>
         <li class="nav-item"><a class="nav-link" href="/recovery">Recovery</a></li>
         <li class="nav-item"><a class="nav-link" href="/access-log">Access Log</a></li>
@@ -26,25 +26,29 @@
     </div>
   </nav>
   <div class="container py-4">
-    <h1 class="mb-3">Threat Detection</h1>
-    <table class="table" id="incidents">
+    <h1 class="mb-3">Device Management</h1>
+    <table class="table" id="device-table">
       <thead>
-        <tr><th>Device</th><th>Anomaly</th><th>Score</th><th>Time</th></tr>
+        <tr><th>Device</th><th>Status</th><th>Last Seen</th><th>Action</th></tr>
       </thead>
       <tbody></tbody>
     </table>
   </div>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/js/bootstrap.bundle.min.js"></script>
   <script>
-    async function loadIncidents(){
-      const res = await fetch('/status-data');
+    async function loadDevices(){
+      const res = await fetch('/device-data');
       const data = await res.json();
-      const rows = data.incidents.map(i =>
-        `<tr><td>${i.device_id}</td><td>${i.description}</td><td>${i.score ?? ''}</td><td>${i.timestamp}</td></tr>`
+      const rows = data.devices.map(d =>
+        `<tr><td>${d.id}</td><td>${d.quarantined ? 'Quarantined' : 'Active'}</td><td>${d.last || ''}</td><td><button class='btn btn-sm btn-${d.quarantined?'secondary':'danger'}' onclick='toggle("${d.id}", ${d.quarantined})'>${d.quarantined?'Unquarantine':'Quarantine'}</button></td></tr>`
       ).join('');
-      document.querySelector('#incidents tbody').innerHTML = rows;
+      document.querySelector('#device-table tbody').innerHTML = rows;
     }
-    window.onload = loadIncidents;
+    async function toggle(id, q){
+      await fetch('/quarantine/' + id, {method: q ? 'DELETE' : 'POST'});
+      loadDevices();
+    }
+    window.onload = loadDevices;
   </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
