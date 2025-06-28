@@ -7,6 +7,7 @@ import time
 from datetime import datetime
 
 import ipfshttpclient
+import requests
 
 from flask_app.hlf_client import record_sensor_data
 
@@ -44,12 +45,16 @@ def main():
     parser.add_argument("device_id")
     parser.add_argument("--interval", type=int, default=60,
                         help="seconds between measurements")
-    parser.add_argument("--lora", action="store_true",
-                        help="forward readings over LoRa")
+    parser.add_argument("--mode", choices=["http", "lora", "both"],
+                        default="http",
+                        help="transmission method")
+    parser.add_argument("--endpoint", default="http://localhost:8443/sensor",
+                        help="HTTP endpoint for sensor data")
     args = parser.parse_args()
 
     client = ipfshttpclient.connect('/dns/localhost/tcp/5001/http')
-    lora = DummyLoRa() if args.lora else None
+    lora = DummyLoRa() if args.mode in ("lora", "both") else None
+    session = requests.Session() if args.mode in ("http", "both") else None
 
     while True:
         temp, hum = read_dht22()
@@ -69,12 +74,30 @@ def main():
             'water_level': water,
             'timestamp': timestamp,
         }
-        data = json.dumps(payload).encode('utf-8')
-        cid = client.add_bytes(data)
-        record_sensor_data(args.device_id, temp, hum, timestamp, cid)
 
-        if lora:
-            lora.send(data)
+        if args.mode == 'http':
+            try:
+                session.post(args.endpoint, json=payload, timeout=5)
+            except Exception as e:
+                print('HTTP send failed:', e)
+        else:
+            data = json.dumps(payload).encode('utf-8')
+            cid = client.add_bytes(data)
+            record_sensor_data(args.device_id, temp, hum, timestamp, cid)
+            payload['cid'] = cid
+            data = json.dumps(payload).encode('utf-8')
+
+            if lora:
+                try:
+                    lora.send(data)
+                except Exception as e:
+                    print('LoRa send failed:', e)
+
+            if args.mode == 'both' and session:
+                try:
+                    session.post(args.endpoint, json=payload, timeout=5)
+                except Exception as e:
+                    print('HTTP send failed:', e)
 
         time.sleep(args.interval)
 
