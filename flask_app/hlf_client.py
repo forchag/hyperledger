@@ -63,14 +63,19 @@ def log_event(device_id, event_type, timestamp):
     print(f"[HLF] event {device_id} {event_type} {timestamp}")
 
 
-def log_security_incident(device_id, description, timestamp):
+def log_security_incident(device_id, description, timestamp, *, score=None, payload=None):
     """Log a security incident on the ledger."""
-    INCIDENTS.append({
+    incident = {
         'device_id': device_id,
         'description': description,
         'timestamp': timestamp,
-    })
-    print(f"[HLF] security incident {device_id} {description} {timestamp}")
+    }
+    if score is not None:
+        incident['score'] = score
+    if payload is not None:
+        incident['payload'] = payload
+    INCIDENTS.append(incident)
+    print(f"[HLF] security incident {device_id} {description} {timestamp} score={score}")
 
 
 def attest_device(device_id, status, timestamp):

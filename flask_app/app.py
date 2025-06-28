@@ -165,6 +165,7 @@ def index():
                     <li class='nav-item'><a class='nav-link' href='/integrity'>Data Integrity</a></li>
                     <li class='nav-item'><a class='nav-link' href='/connect'>Sensor Connection</a></li>
                     <li class='nav-item'><a class='nav-link' href='/status'>Network Status</a></li>
+                    <li class='nav-item'><a class='nav-link' href='/tde'>Threat Detection</a></li>
                 </ul>
             </div>
         </nav>
@@ -459,6 +460,13 @@ def status_page():
 def connect_page():
     """Serve the sensor connection setup page."""
     template = Path(__file__).resolve().parent.parent / 'sensor_connection.html'
+    return render_template_string(template.read_text())
+
+
+@app.route('/tde')
+def tde_page():
+    """Show threat detection incidents."""
+    template = Path(__file__).resolve().parent.parent / 'threat_detection.html'
     return render_template_string(template.read_text())
 
 

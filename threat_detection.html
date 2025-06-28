@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Threat Detection</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+  <header class="bg-dark text-white text-center py-3 mb-4">
+    <h1>Hyperledger Farm Dashboard</h1>
+  </header>
+  <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4">
+    <div class="container-fluid">
+      <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+        <li class="nav-item"><a class="nav-link" href="/integrity">Data Integrity</a></li>
+        <li class="nav-item"><a class="nav-link" href="/connect">Sensor Connection</a></li>
+        <li class="nav-item"><a class="nav-link" href="/status">Network Status</a></li>
+        <li class="nav-item"><a class="nav-link active" aria-current="page" href="/tde">Threat Detection</a></li>
+      </ul>
+    </div>
+  </nav>
+  <div class="container py-4">
+    <h1 class="mb-3">Threat Detection</h1>
+    <table class="table" id="incidents">
+      <thead>
+        <tr><th>Device</th><th>Anomaly</th><th>Score</th><th>Time</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/js/bootstrap.bundle.min.js"></script>
+  <script>
+    async function loadIncidents(){
+      const res = await fetch('/status-data');
+      const data = await res.json();
+      const rows = data.incidents.map(i =>
+        `<tr><td>${i.device_id}</td><td>${i.description}</td><td>${i.score ?? ''}</td><td>${i.timestamp}</td></tr>`
+      ).join('');
+      document.querySelector('#incidents tbody').innerHTML = rows;
+    }
+    window.onload = loadIncidents;
+  </script>
+</body>
+</html>

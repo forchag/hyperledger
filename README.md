@@ -218,6 +218,46 @@ This information is refreshed live from the in-memory data maintained by
 `hlf_client` while `incident_responder` runs in the background when the
 web server starts.
 
+## Threat Detection Engine (TDE)
+
+The Threat Detection Engine is the heart of the cybersecurity layer and is
+deployed directly on the Edge Gateway Node (e.g., Raspberry Pi). This engine
+continuously monitors device behavior to detect anomalies that may signify
+malicious activity.
+
+### Behavioral Baseline and Profiling
+
+Each sensor or actuator device has an expected pattern of behavior—defined by
+transmission intervals, data ranges, and communication protocols. The TDE builds
+a real-time behavioral model using a rolling average and standard deviation.
+
+### Lightweight Machine Learning
+
+For more advanced scenarios, a decision-tree classifier or anomaly detection
+algorithm like Isolation Forest is embedded in the gateway to learn patterns
+over time.
+
+Normal behavior: Regular sensor data within expected frequency
+
+Anomaly: Sudden surge of messages, invalid payloads, command injections
+
+These models continuously score each device with a Suspicion Score (0–1).
+Scores above a configurable threshold (e.g., 0.8) are treated as incidents.
+
+### Incident Generation
+
+Once a behavior is flagged, the engine generates a Security Incident Report
+(SIR) with metadata including:
+
+* Device ID
+* Type of anomaly
+* Time of detection
+* Suspicion score
+* Payload snapshot (optional)
+
+The report is serialized in JSON and forwarded to the blockchain via the smart
+contract interface.
+
 ## Data storage and recovery
 
 Sensor payloads are written to **IPFS**, giving each reading a content
