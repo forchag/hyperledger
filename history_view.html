@@ -2,8 +2,9 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Threat Detection</title>
+  <title>Sensor History</title>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="bg-light">
   <header class="bg-dark text-white text-center py-3 mb-4">
@@ -15,8 +16,8 @@
         <li class="nav-item"><a class="nav-link" href="/integrity">Data Integrity</a></li>
         <li class="nav-item"><a class="nav-link" href="/connect">Sensor Connection</a></li>
         <li class="nav-item"><a class="nav-link" href="/status">Network Status</a></li>
-        <li class="nav-item"><a class="nav-link active" aria-current="page" href="/tde">Threat Detection</a></li>
-        <li class="nav-item"><a class="nav-link" href="/history">Sensor History</a></li>
+        <li class="nav-item"><a class="nav-link" href="/tde">Threat Detection</a></li>
+        <li class="nav-item"><a class="nav-link active" aria-current="page" href="/history">Sensor History</a></li>
         <li class="nav-item"><a class="nav-link" href="/explorer">Blockchain Explorer</a></li>
         <li class="nav-item"><a class="nav-link" href="/devices">Device Management</a></li>
         <li class="nav-item"><a class="nav-link" href="/storage">Storage Monitor</a></li>
@@ -26,25 +27,29 @@
     </div>
   </nav>
   <div class="container py-4">
-    <h1 class="mb-3">Threat Detection</h1>
-    <table class="table" id="incidents">
-      <thead>
-        <tr><th>Device</th><th>Anomaly</th><th>Score</th><th>Time</th></tr>
-      </thead>
-      <tbody></tbody>
-    </table>
+    <h1 class="mb-3">Sensor History</h1>
+    <canvas id="historyChart" height="100"></canvas>
   </div>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/js/bootstrap.bundle.min.js"></script>
   <script>
-    async function loadIncidents(){
-      const res = await fetch('/status-data');
+    async function loadHistory(){
+      const res = await fetch('/history-data');
       const data = await res.json();
-      const rows = data.incidents.map(i =>
-        `<tr><td>${i.device_id}</td><td>${i.description}</td><td>${i.score ?? ''}</td><td>${i.timestamp}</td></tr>`
-      ).join('');
-      document.querySelector('#incidents tbody').innerHTML = rows;
+      const labels = data.map(d => d.timestamp);
+      const temps = data.map(d => d.temperature);
+      const hums = data.map(d => d.humidity);
+      new Chart(document.getElementById('historyChart'), {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            {label: 'Temperature', data: temps, borderColor: 'red', fill: false},
+            {label: 'Humidity', data: hums, borderColor: 'blue', fill: false}
+          ]
+        }
+      });
     }
-    window.onload = loadIncidents;
+    window.onload = loadHistory;
   </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

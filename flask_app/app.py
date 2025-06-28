@@ -8,6 +8,7 @@ from pathlib import Path
 import io
 
 # Placeholder for Hyperledger Fabric client imports
+import hlf_client
 from hlf_client import (
     record_sensor_data,
     register_device,
@@ -35,6 +36,19 @@ client = ipfshttpclient.connect('/dns/localhost/tcp/5001/http')
 
 # Track whether the Fabric network has been started
 BLOCKCHAIN_STARTED = False
+
+# Store recent HTTP access events
+ACCESS_LOG = []
+
+@app.before_request
+def log_access():
+    """Record basic request info for the access log."""
+    ACCESS_LOG.append({
+        'time': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'path': request.path,
+    })
+    if len(ACCESS_LOG) > 50:
+        del ACCESS_LOG[0]
 
 # Potential Raspberry Pi addresses to probe when discovering active nodes
 NODE_ADDRESSES = [
@@ -166,6 +180,12 @@ def index():
                     <li class='nav-item'><a class='nav-link' href='/connect'>Sensor Connection</a></li>
                     <li class='nav-item'><a class='nav-link' href='/status'>Network Status</a></li>
                     <li class='nav-item'><a class='nav-link' href='/tde'>Threat Detection</a></li>
+                    <li class='nav-item'><a class='nav-link' href='/history'>Sensor History</a></li>
+                    <li class='nav-item'><a class='nav-link' href='/explorer'>Blockchain Explorer</a></li>
+                    <li class='nav-item'><a class='nav-link' href='/devices'>Device Management</a></li>
+                    <li class='nav-item'><a class='nav-link' href='/storage'>Storage Monitor</a></li>
+                    <li class='nav-item'><a class='nav-link' href='/recovery'>Recovery</a></li>
+                    <li class='nav-item'><a class='nav-link' href='/access-log'>Access Log</a></li>
                 </ul>
             </div>
         </nav>
@@ -540,6 +560,99 @@ def record_sensor():
         cid,
     )
     return jsonify({'cid': cid})
+
+
+# ----------------- Additional dashboard pages -----------------
+
+@app.route('/history')
+def history_page():
+    template = Path(__file__).resolve().parent.parent / 'history_view.html'
+    return render_template_string(template.read_text())
+
+
+@app.route('/history-data')
+def history_data():
+    sensor_id = request.args.get('sensor_id')
+    if not sensor_id:
+        ids = list_devices()
+        sensor_id = ids[0] if ids else None
+    records = get_sensor_history(sensor_id) if sensor_id else []
+    return jsonify(records)
+
+
+@app.route('/explorer')
+def explorer_page():
+    template = Path(__file__).resolve().parent.parent / 'block_explorer.html'
+    return render_template_string(template.read_text())
+
+
+@app.route('/blockchain-info')
+def blockchain_info():
+    return jsonify({'events': get_block_events()})
+
+
+@app.route('/devices')
+def devices_page():
+    template = Path(__file__).resolve().parent.parent / 'device_management.html'
+    return render_template_string(template.read_text())
+
+
+@app.route('/device-data')
+def device_data():
+    devices = []
+    q = set(get_quarantined())
+    for dev in list_devices():
+        hist = get_sensor_history(dev)
+        last = hist[-1]['timestamp'] if hist else ''
+        devices.append({'id': dev, 'quarantined': dev in q, 'last': last})
+    return jsonify({'devices': devices})
+
+
+@app.route('/quarantine/<device_id>', methods=['POST', 'DELETE'])
+def quarantine_route(device_id):
+    if request.method == 'POST':
+        hlf_client.quarantine_device(device_id)
+    else:
+        hlf_client.QUARANTINED.discard(device_id)
+    return 'ok'
+
+
+@app.route('/storage')
+def storage_page():
+    template = Path(__file__).resolve().parent.parent / 'storage_monitor.html'
+    return render_template_string(template.read_text())
+
+
+@app.route('/storage-data')
+def storage_data():
+    out = []
+    for dev in list_devices():
+        for rec in get_sensor_history(dev):
+            out.append({'id': dev, 'cid': rec.get('cid'), 'timestamp': rec.get('timestamp')})
+    return jsonify(out)
+
+
+@app.route('/recovery')
+def recovery_page():
+    template = Path(__file__).resolve().parent.parent / 'recovery_dashboard.html'
+    return render_template_string(template.read_text())
+
+
+@app.route('/simulate-recovery', methods=['POST'])
+def simulate_recovery():
+    count = sum(len(get_sensor_history(d)) for d in list_devices())
+    return jsonify({'message': f'Replicated {count} records'})
+
+
+@app.route('/access-log')
+def access_log_page():
+    template = Path(__file__).resolve().parent.parent / 'access_log.html'
+    return render_template_string(template.read_text())
+
+
+@app.route('/access-data')
+def access_data():
+    return jsonify(ACCESS_LOG)
 
 if __name__ == '__main__':
     # Start background watcher for incidents
