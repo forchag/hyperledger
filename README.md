@@ -64,6 +64,34 @@ but it can also transmit them over LoRa or use both channels for redundancy via
 the `--mode` option. These scripts are stubs and can be run on a Raspberry Pi
 with appropriate radio modules attached.
 
+## Connecting sensors to a Raspberry Pi
+
+1. **Gather jumper wires and the sensors**
+   Each sensor normally has three pins: power (`VCC`), ground (`GND`) and a data
+   line. Use female‑to‑male jumper wires so they plug directly onto the Pi's
+   GPIO header.
+
+2. **Wire the DHT22 temperature and humidity sensor**
+   - Connect `VCC` to pin **1** (5&nbsp;V).
+   - Connect `GND` to pin **6**.
+   - Connect the data pin to **GPIO&nbsp;4**.
+   - Place a 10&nbsp;kΩ resistor between `VCC` and the data pin.
+
+3. **Attach the soil moisture, pH, light and water level sensors**
+   - Use any free 5&nbsp;V and GND pins for power.
+   - Connect the data pins to **GPIO&nbsp;17**, **GPIO&nbsp;18**,
+     **GPIO&nbsp;6** and **GPIO&nbsp;16** respectively.
+   - If a sensor outputs an analog signal, route it through an ADC such as the
+     MCP3008 before connecting it to the GPIO pin.
+
+4. **Test your wiring**
+   Power on the Pi and run:
+   ```bash
+   python sensor_node.py sensor-1
+   ```
+   If you see numbers printing every few seconds the sensors are properly
+   connected.
+
 ## Running a Fabric network locally
 
 The instructions below walk through a complete setup on a small Raspberry Pi cluster. The first Pi is assumed to have the address `192.168.0.163` and additional nodes can use `192.168.0.199` and `192.168.0.200`.
@@ -102,16 +130,23 @@ The instructions below walk through a complete setup on a small Raspberry Pi clu
    executed by `test_network.sh` fails to create `sensor.tar.gz` and chaincode
    installation stops with `failed to read chaincode package at 'sensor.tar.gz'`.
 
-4. **Start the network and deploy chaincode**
+4. **Make the helper script executable**
+   The network script is not executable when cloned. Grant execute permission
+   once:
+   ```bash
+   chmod +x test_network.sh
+   ```
+
+5. **Start the network and deploy chaincode**
    From the repository root run:
    ```bash
    ./test_network.sh
    ```
-   The script automatically changes into `fabric-samples/test-network`,
+The script automatically changes into `fabric-samples/test-network`,
    stops any running instance of the test network, then brings up a fresh
    network and deploys the `sensor` chaincode.
 
-5. **Start supporting services**
+6. **Start supporting services**
    Open a new terminal and run the IPFS daemon:
    ```bash
    ipfs daemon
@@ -121,7 +156,7 @@ The instructions below walk through a complete setup on a small Raspberry Pi clu
    pip install flask ipfshttpclient
     python flask_app/app.py
     ```
-6. **Interact with the network**
+7. **Interact with the network**
     Open `https://192.168.0.163:8443/` in your browser to use the dashboard or invoke the tools in the `tools` directory.
 
 ### Adding another Raspberry Pi
@@ -135,7 +170,7 @@ python flask_app/app.py
 
 Visit `https://<new-pi-ip>:8443/` to access the dashboard of that node. Once two or more nodes are registered the first Pi automatically starts the Fabric network.
 
-7. **Stop the network**
+8. **Stop the network**
    ```bash
    cd fabric-samples/test-network
    ./network.sh down
