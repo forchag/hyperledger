@@ -179,6 +179,8 @@ python flask_app/app.py
 
 Visit `https://<new-pi-ip>:8443/` to access the dashboard of that node. Once two or more nodes are registered the first Pi automatically starts the Fabric network.
 
+**Important:** Do **not** run `./test_network.sh` or attempt to deploy the chaincode from additional nodes. The sample test network is designed to run on a single machine. Starting it again on another Pi will spin up a second set of peers and orderers that cannot communicate with the first, causing "chaincode failed" errors during installation. Only the first node should host the Fabric containers. Other nodes simply run the IPFS daemon and Flask dashboard so they can talk to the blockchain through the gateway on the first Pi.
+
 8. **Stop the network**
    ```bash
    cd fabric-samples/test-network
