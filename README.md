@@ -146,6 +146,15 @@ The script automatically changes into `fabric-samples/test-network`,
    stops any running instance of the test network, then brings up a fresh
    network and deploys the `sensor` chaincode.
 
+**Important:** Run this command on only one host. The default
+`test-network` uses Docker Compose to launch all Fabric containers on the
+local machine. Starting it simultaneously on multiple nodes creates
+separate peers and orderers that cannot communicate, leading to timeout
+errors during chaincode installation. After the script finishes verify
+the peers are running with `docker ps`. For a real multi-host setup you
+must edit the compose files under `fabric-samples/test-network` so that
+peers and orderers reference the correct remote addresses.
+
 6. **Start supporting services**
    Open a new terminal and run the IPFS daemon:
    ```bash
