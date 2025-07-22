@@ -24,7 +24,7 @@ class DummyLoRa:
         print("Sending:", payload)
 
     def receive(self) -> bytes:
-        return b''
+        return b""
 
 
 # lora = LoRa()
@@ -37,9 +37,9 @@ def send_reading(device_id: str):
         "id": device_id,
         "temperature": temp,
         "humidity": hum,
-        "timestamp": datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+        "timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
-    payload = json.dumps(data).encode('utf-8')
+    payload = json.dumps(data).encode("utf-8")
     lora.send(payload)
 
 
@@ -47,19 +47,23 @@ def send_heartbeat(device_id: str):
     msg = {
         "id": device_id,
         "type": "heartbeat",
-        "timestamp": datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+        "timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
-    payload = json.dumps(msg).encode('utf-8')
+    payload = json.dumps(msg).encode("utf-8")
     lora.send(payload)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="LoRa sensor node")
     parser.add_argument("device_id")
-    parser.add_argument("--heartbeat", action="store_true",
-                        help="send heartbeats instead of a single reading")
-    parser.add_argument("--interval", type=int, default=60,
-                        help="seconds between heartbeats")
+    parser.add_argument(
+        "--heartbeat",
+        action="store_true",
+        help="send heartbeats instead of a single reading",
+    )
+    parser.add_argument(
+        "--interval", type=int, default=60, help="seconds between heartbeats"
+    )
     args = parser.parse_args()
 
     if args.heartbeat:

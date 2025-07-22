@@ -79,7 +79,13 @@ class ThreatDetectionEngine:
                 "score": round(suspicion, 3),
                 "payload": reading,
             }
-            log_security_incident(device_id, "behavior_anomaly", sir["time"], score=sir["score"], payload=reading)
+            log_security_incident(
+                device_id,
+                "behavior_anomaly",
+                sir["time"],
+                score=sir["score"],
+                payload=reading,
+            )
             print(json.dumps(sir))
             return sir
         return None

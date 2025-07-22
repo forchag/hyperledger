@@ -9,7 +9,7 @@ def bootstrap() -> None:
     """Fetch all stored sensor payloads and display them."""
     for dev in hlf_client.list_devices():
         for record in hlf_client.get_sensor_history(dev):
-            payload = record.get('payload')
+            payload = record.get("payload")
             if payload:
                 print(f"Payload for {dev} at {record['timestamp']}: {payload[:30]}...")
 
@@ -20,5 +20,5 @@ def main():
     bootstrap()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

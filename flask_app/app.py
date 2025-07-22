@@ -39,36 +39,40 @@ BLOCKCHAIN_STARTED = False
 # Store recent HTTP access events
 ACCESS_LOG = []
 
+
 @app.before_request
 def log_access():
     """Record basic request info for the access log."""
-    ACCESS_LOG.append({
-        'time': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
-        'path': request.path,
-    })
+    ACCESS_LOG.append(
+        {
+            "time": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "path": request.path,
+        }
+    )
     if len(ACCESS_LOG) > 50:
         del ACCESS_LOG[0]
 
+
 # Potential Raspberry Pi addresses to probe when discovering active nodes
 NODE_ADDRESSES = [
-    '192.168.0.163',
-    '192.168.0.199',
-    '192.168.0.200',
+    "192.168.0.163",
+    "192.168.0.199",
+    "192.168.0.200",
 ]
 
 # Mapping of node IPs to sensors attached to that node. The key is the IP
 # address and the value is a dictionary mapping the sensor name to the GPIO pin.
 NODE_SENSORS = {
-    '192.168.0.163': {'dht22': 4, 'soil': 17},
-    '192.168.0.199': {'dht22': 4, 'soil': 17},
-    '192.168.0.200': {'dht22': 4, 'soil': 17},
+    "192.168.0.163": {"dht22": 4, "soil": 17},
+    "192.168.0.199": {"dht22": 4, "soil": 17},
+    "192.168.0.200": {"dht22": 4, "soil": 17},
 }
 
 
 def compute_merkle_root(tx_hashes):
     """Return Merkle root and list of levels for given transaction hashes."""
     if not tx_hashes:
-        return '0x0', []
+        return "0x0", []
     level = tx_hashes[:]
     tree = [level]
     while len(level) > 1:
@@ -86,22 +90,25 @@ def compute_merkle_root(tx_hashes):
 def build_csv(sensor_id=None, start=None, end=None):
     """Return CSV bytes and SHA256 hash for the requested data."""
     import csv
+
     if sensor_id:
         records = get_sensor_history(sensor_id, start, end)
     else:
         records = get_all_sensor_data(start, end)
-    records.sort(key=lambda r: r['timestamp'])
+    records.sort(key=lambda r: r["timestamp"])
     out = io.StringIO()
-    writer = csv.DictWriter(out, fieldnames=['id', 'temperature', 'humidity', 'timestamp', 'payload'])
+    writer = csv.DictWriter(
+        out, fieldnames=["id", "temperature", "humidity", "timestamp", "payload"]
+    )
     writer.writeheader()
     for r in records:
         writer.writerow(r)
-    data = out.getvalue().encode('utf-8')
+    data = out.getvalue().encode("utf-8")
     h = hashlib.sha256(data).hexdigest()
     return data, h
 
 
-@app.route('/')
+@app.route("/")
 def index():
     nodes = list_devices()
     return render_template_string(
@@ -258,41 +265,41 @@ def index():
     )
 
 
-@app.route('/nodes')
+@app.route("/nodes")
 def nodes():
     nodes = list_devices()
-    return jsonify({'count': len(nodes), 'nodes': nodes})
+    return jsonify({"count": len(nodes), "nodes": nodes})
 
 
-@app.route('/latest-readings')
+@app.route("/latest-readings")
 def latest_readings():
     """Return most recent sensor readings for all devices."""
     return jsonify(get_latest_readings())
 
 
-@app.route('/block-events')
+@app.route("/block-events")
 def block_events():
     """Return recent blockchain operation events."""
-    return jsonify({'events': get_block_events()})
+    return jsonify({"events": get_block_events()})
 
 
-@app.route('/start-blockchain', methods=['POST'])
+@app.route("/start-blockchain", methods=["POST"])
 def start_blockchain_route():
     checks, started = start_blockchain()
-    return jsonify({'started': started, 'checks': checks})
+    return jsonify({"started": started, "checks": checks})
 
 
-@app.route('/restart-blockchain', methods=['POST'])
+@app.route("/restart-blockchain", methods=["POST"])
 def restart_blockchain_route():
     checks, started = restart_blockchain()
-    return jsonify({'started': started, 'checks': checks})
+    return jsonify({"started": started, "checks": checks})
 
 
 def ping_node(ip: str) -> bool:
     """Return True if the given IP responds to a single ping."""
     try:
         res = subprocess.run(
-            ['ping', '-c', '1', '-W', '1', ip],
+            ["ping", "-c", "1", "-W", "1", ip],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
@@ -307,14 +314,16 @@ def run_system_checks():
 
     def _check(cmd, msg):
         try:
-            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-            checks.append({'check': msg, 'ok': True})
+            subprocess.run(
+                cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True
+            )
+            checks.append({"check": msg, "ok": True})
         except Exception:
-            checks.append({'check': msg, 'ok': False})
+            checks.append({"check": msg, "ok": False})
 
-    _check(['docker', '--version'], 'Docker installed')
-    _check(['docker-compose', '--version'], 'Docker Compose installed')
-    _check(['curl', '--version'], 'curl available')
+    _check(["docker", "--version"], "Docker installed")
+    _check(["docker-compose", "--version"], "Docker Compose installed")
+    _check(["curl", "--version"], "curl available")
     return checks
 
 
@@ -322,18 +331,18 @@ def start_blockchain():
     """Run checks and start the Fabric test network."""
     global BLOCKCHAIN_STARTED
     checks = run_system_checks()
-    if not all(c['ok'] for c in checks):
+    if not all(c["ok"] for c in checks):
         return checks, False
     if BLOCKCHAIN_STARTED:
         return checks, True
     try:
-        script = Path(__file__).resolve().parent.parent / 'test_network.sh'
-        subprocess.Popen(['bash', str(script)])
+        script = Path(__file__).resolve().parent.parent / "test_network.sh"
+        subprocess.Popen(["bash", str(script)])
         BLOCKCHAIN_STARTED = True
-        print('Blockchain network start initiated')
+        print("Blockchain network start initiated")
         return checks, True
     except Exception as e:
-        print('Failed to start blockchain:', e)
+        print("Failed to start blockchain:", e)
         return checks, False
 
 
@@ -341,8 +350,10 @@ def restart_blockchain():
     """Stop the network and start it again."""
     global BLOCKCHAIN_STARTED
     try:
-        net_dir = Path(__file__).resolve().parent.parent / 'fabric-samples' / 'test-network'
-        subprocess.run(['bash', 'network.sh', 'down'], cwd=net_dir)
+        net_dir = (
+            Path(__file__).resolve().parent.parent / "fabric-samples" / "test-network"
+        )
+        subprocess.run(["bash", "network.sh", "down"], cwd=net_dir)
     except Exception:
         pass
     BLOCKCHAIN_STARTED = False
@@ -355,24 +366,22 @@ def check_and_start_blockchain():
         start_blockchain()
 
 
-@app.route('/discover')
+@app.route("/discover")
 def discover():
     active = [ip for ip in NODE_ADDRESSES if ping_node(ip)]
-    nodes = [
-        {'ip': ip, 'sensors': NODE_SENSORS.get(ip, {})}
-        for ip in active
-    ]
-    return jsonify({'count': len(active), 'nodes': nodes})
+    nodes = [{"ip": ip, "sensors": NODE_SENSORS.get(ip, {})} for ip in active]
+    return jsonify({"count": len(active), "nodes": nodes})
 
-@app.route('/upload', methods=['POST'])
+
+@app.route("/upload", methods=["POST"])
 def upload_file():
-    if 'file' not in request.files:
-        return 'No file provided', 400
-    file = request.files['file']
-    data = base64.b64encode(file.read()).decode('utf-8')
+    if "file" not in request.files:
+        return "No file provided", 400
+    file = request.files["file"]
+    data = base64.b64encode(file.read()).decode("utf-8")
     payload = {
-        'filename': file.filename,
-        'data': data,
+        "filename": file.filename,
+        "data": data,
     }
     record_sensor_data(
         id=file.filename,
@@ -382,71 +391,74 @@ def upload_file():
         ph=0,
         light=0,
         water_level=0,
-        timestamp=datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+        timestamp=datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
         payload=payload,
     )
-    return jsonify({'stored': True})
+    return jsonify({"stored": True})
 
 
-@app.route('/register', methods=['POST'])
+@app.route("/register", methods=["POST"])
 def register():
     data = request.get_json()
-    if not data or 'id' not in data or 'owner' not in data:
-        return 'Invalid JSON', 400
-    register_device(data['id'], data['owner'])
+    if not data or "id" not in data or "owner" not in data:
+        return "Invalid JSON", 400
+    register_device(data["id"], data["owner"])
     check_and_start_blockchain()
-    return 'registered'
+    return "registered"
 
-@app.route('/retrieve/<device_id>', methods=['GET'])
+
+@app.route("/retrieve/<device_id>", methods=["GET"])
 def retrieve_file(device_id):
     data = get_sensor_data(device_id)
-    if not data or 'payload' not in data:
-        return 'No sensor data found', 404
-    payload = hlf_client.decrypt_payload(data['payload'])
+    if not data or "payload" not in data:
+        return "No sensor data found", 404
+    payload = hlf_client.decrypt_payload(data["payload"])
     return jsonify(payload)
 
 
-@app.route('/verify/<sensor_id>', methods=['GET'])
+@app.route("/verify/<sensor_id>", methods=["GET"])
 def verify(sensor_id):
     data = get_sensor_data(sensor_id)
-    if not data or 'payload' not in data:
-        return 'No sensor data found', 404
-    payload = hlf_client.decrypt_payload(data['payload'])
-    return jsonify({'valid': bool(payload)})
+    if not data or "payload" not in data:
+        return "No sensor data found", 404
+    payload = hlf_client.decrypt_payload(data["payload"])
+    return jsonify({"valid": bool(payload)})
 
 
-@app.route('/recover/<sensor_id>', methods=['GET'])
+@app.route("/recover/<sensor_id>", methods=["GET"])
 def recover(sensor_id):
     data = get_sensor_data(sensor_id)
-    if not data or 'payload' not in data:
-        return 'No sensor data found', 404
-    payload = hlf_client.decrypt_payload(data['payload'])
+    if not data or "payload" not in data:
+        return "No sensor data found", 404
+    payload = hlf_client.decrypt_payload(data["payload"])
     return jsonify(payload)
 
 
-@app.route('/merkle/<int:block_num>')
+@app.route("/merkle/<int:block_num>")
 def merkle(block_num: int):
     """Return Merkle tree information for a block."""
     block = get_block(block_num)
     tx_hashes = [
         hashlib.sha256(json.dumps(tx).encode()).hexdigest()
-        for tx in block.get('data', [])
+        for tx in block.get("data", [])
     ]
     root, tree = compute_merkle_root(tx_hashes)
-    return jsonify({'root': root, 'tree': tree})
+    return jsonify({"root": root, "tree": tree})
 
 
-@app.route('/status-data')
+@app.route("/status-data")
 def status_data():
     """Return incidents and quarantine information."""
-    return jsonify({
-        'incidents': get_incidents(),
-        'quarantined': get_quarantined(),
-        'attestations': get_attestations(),
-    })
+    return jsonify(
+        {
+            "incidents": get_incidents(),
+            "quarantined": get_quarantined(),
+            "attestations": get_attestations(),
+        }
+    )
 
 
-@app.route('/status')
+@app.route("/status")
 def status_page():
     """Display current incidents and quarantine status."""
     return render_template_string(
@@ -478,105 +490,107 @@ def status_page():
     )
 
 
-@app.route('/connect')
+@app.route("/connect")
 def connect_page():
     """Serve the sensor connection setup page."""
-    template = Path(__file__).resolve().parent.parent / 'sensor_connection.html'
+    template = Path(__file__).resolve().parent.parent / "sensor_connection.html"
     return render_template_string(template.read_text())
 
 
-@app.route('/tde')
+@app.route("/tde")
 def tde_page():
     """Show threat detection incidents."""
-    template = Path(__file__).resolve().parent.parent / 'threat_detection.html'
+    template = Path(__file__).resolve().parent.parent / "threat_detection.html"
     return render_template_string(template.read_text())
 
 
-@app.route('/check-pins', methods=['POST'])
+@app.route("/check-pins", methods=["POST"])
 def check_pins():
     """Simple stub that pretends to verify pin connections."""
     info = request.get_json() or {}
-    node = info.get('node')
+    node = info.get("node")
     valid = node in list_devices() or ping_node(node)
-    msg = 'Pins appear connected and data is flowing.' if valid else 'Node not found.'
-    return jsonify({'message': msg, 'ok': valid})
+    msg = "Pins appear connected and data is flowing." if valid else "Node not found."
+    return jsonify({"message": msg, "ok": valid})
 
 
-@app.route('/integrity')
+@app.route("/integrity")
 def integrity_page():
     """Serve the data integrity management page."""
-    template = Path(__file__).resolve().parent.parent / 'data_integrity.html'
+    template = Path(__file__).resolve().parent.parent / "data_integrity.html"
     return render_template_string(template.read_text())
 
 
-@app.route('/export')
+@app.route("/export")
 def export_data():
-    sensor_id = request.args.get('sensor_id')
-    start = request.args.get('start')
-    end = request.args.get('end')
+    sensor_id = request.args.get("sensor_id")
+    start = request.args.get("start")
+    end = request.args.get("end")
     data, h = build_csv(sensor_id, start, end)
     resp = make_response(data)
-    resp.headers['Content-Type'] = 'text/csv'
-    resp.headers['Content-Disposition'] = 'attachment; filename="sensor_data.csv"'
-    resp.headers['X-Data-Hash'] = h
+    resp.headers["Content-Type"] = "text/csv"
+    resp.headers["Content-Disposition"] = 'attachment; filename="sensor_data.csv"'
+    resp.headers["X-Data-Hash"] = h
     return resp
 
 
-@app.route('/state/<date>')
+@app.route("/state/<date>")
 def state_on(date):
     """Return the last reading for each node on the given YYYY-MM-DD date."""
     info = get_state_on(date)
     return jsonify(info)
 
 
-@app.route('/verify-data', methods=['POST'])
+@app.route("/verify-data", methods=["POST"])
 def verify_data():
-    sensor_id = request.form.get('sensor_id')
-    start = request.form.get('start')
-    end = request.form.get('end')
-    if 'file' not in request.files:
-        return 'no file', 400
-    uploaded = request.files['file'].read()
+    sensor_id = request.form.get("sensor_id")
+    start = request.form.get("start")
+    end = request.form.get("end")
+    if "file" not in request.files:
+        return "no file", 400
+    uploaded = request.files["file"].read()
     uploaded_hash = hashlib.sha256(uploaded).hexdigest()
     _, expected_hash = build_csv(sensor_id, start, end)
-    return jsonify({'verified': uploaded_hash == expected_hash})
+    return jsonify({"verified": uploaded_hash == expected_hash})
 
-@app.route('/sensor', methods=['POST'])
+
+@app.route("/sensor", methods=["POST"])
 def record_sensor():
     if request.is_json:
         data = request.get_json()
     else:
         data = request.form.to_dict()
     if not data:
-        return 'Invalid payload', 400
-    data['node_ip'] = request.remote_addr
-    data['timestamp'] = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-    js = json.dumps(data).encode('utf-8')
+        return "Invalid payload", 400
+    data["node_ip"] = request.remote_addr
+    data["timestamp"] = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    js = json.dumps(data).encode("utf-8")
     record_sensor_data(
-        data.get('id', 'unknown'),
-        float(data.get('temperature', 0)),
-        float(data.get('humidity', 0)),
-        float(data.get('soil_moisture', 0)),
-        float(data.get('ph', 0)),
-        float(data.get('light', 0)),
-        float(data.get('water_level', 0)),
-        data['timestamp'],
+        data.get("id", "unknown"),
+        float(data.get("temperature", 0)),
+        float(data.get("humidity", 0)),
+        float(data.get("soil_moisture", 0)),
+        float(data.get("ph", 0)),
+        float(data.get("light", 0)),
+        float(data.get("water_level", 0)),
+        data["timestamp"],
         data,
     )
-    return jsonify({'stored': True})
+    return jsonify({"stored": True})
 
 
 # ----------------- Additional dashboard pages -----------------
 
-@app.route('/history')
+
+@app.route("/history")
 def history_page():
-    template = Path(__file__).resolve().parent.parent / 'history_view.html'
+    template = Path(__file__).resolve().parent.parent / "history_view.html"
     return render_template_string(template.read_text())
 
 
-@app.route('/history-data')
+@app.route("/history-data")
 def history_data():
-    sensor_id = request.args.get('sensor_id')
+    sensor_id = request.args.get("sensor_id")
     if not sensor_id:
         ids = list_devices()
         sensor_id = ids[0] if ids else None
@@ -584,83 +598,90 @@ def history_data():
     return jsonify(records)
 
 
-@app.route('/explorer')
+@app.route("/explorer")
 def explorer_page():
-    template = Path(__file__).resolve().parent.parent / 'block_explorer.html'
+    template = Path(__file__).resolve().parent.parent / "block_explorer.html"
     return render_template_string(template.read_text())
 
 
-@app.route('/blockchain-info')
+@app.route("/blockchain-info")
 def blockchain_info():
-    return jsonify({'events': get_block_events()})
+    return jsonify({"events": get_block_events()})
 
 
-@app.route('/devices')
+@app.route("/devices")
 def devices_page():
-    template = Path(__file__).resolve().parent.parent / 'device_management.html'
+    template = Path(__file__).resolve().parent.parent / "device_management.html"
     return render_template_string(template.read_text())
 
 
-@app.route('/device-data')
+@app.route("/device-data")
 def device_data():
     devices = []
     q = set(get_quarantined())
     for dev in list_devices():
         hist = get_sensor_history(dev)
-        last = hist[-1]['timestamp'] if hist else ''
-        devices.append({'id': dev, 'quarantined': dev in q, 'last': last})
-    return jsonify({'devices': devices})
+        last = hist[-1]["timestamp"] if hist else ""
+        devices.append({"id": dev, "quarantined": dev in q, "last": last})
+    return jsonify({"devices": devices})
 
 
-@app.route('/quarantine/<device_id>', methods=['POST', 'DELETE'])
+@app.route("/quarantine/<device_id>", methods=["POST", "DELETE"])
 def quarantine_route(device_id):
-    if request.method == 'POST':
+    if request.method == "POST":
         hlf_client.quarantine_device(device_id)
     else:
         hlf_client.QUARANTINED.discard(device_id)
-    return 'ok'
+    return "ok"
 
 
-@app.route('/storage')
+@app.route("/storage")
 def storage_page():
-    template = Path(__file__).resolve().parent.parent / 'storage_monitor.html'
+    template = Path(__file__).resolve().parent.parent / "storage_monitor.html"
     return render_template_string(template.read_text())
 
 
-@app.route('/storage-data')
+@app.route("/storage-data")
 def storage_data():
     out = []
     for dev in list_devices():
         for rec in get_sensor_history(dev):
-            out.append({'id': dev, 'payload': rec.get('payload'), 'timestamp': rec.get('timestamp')})
+            out.append(
+                {
+                    "id": dev,
+                    "payload": rec.get("payload"),
+                    "timestamp": rec.get("timestamp"),
+                }
+            )
     return jsonify(out)
 
 
-@app.route('/recovery')
+@app.route("/recovery")
 def recovery_page():
-    template = Path(__file__).resolve().parent.parent / 'recovery_dashboard.html'
+    template = Path(__file__).resolve().parent.parent / "recovery_dashboard.html"
     return render_template_string(template.read_text())
 
 
-@app.route('/simulate-recovery', methods=['POST'])
+@app.route("/simulate-recovery", methods=["POST"])
 def simulate_recovery():
     count = sum(len(get_sensor_history(d)) for d in list_devices())
-    return jsonify({'message': f'Replicated {count} records'})
+    return jsonify({"message": f"Replicated {count} records"})
 
 
-@app.route('/access-log')
+@app.route("/access-log")
 def access_log_page():
-    template = Path(__file__).resolve().parent.parent / 'access_log.html'
+    template = Path(__file__).resolve().parent.parent / "access_log.html"
     return render_template_string(template.read_text())
 
 
-@app.route('/access-data')
+@app.route("/access-data")
 def access_data():
     return jsonify(ACCESS_LOG)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     # Start background watcher for incidents
     t = threading.Thread(target=incident_watch, daemon=True)
     t.start()
     # Requires cert.pem and key.pem for TLS
-    app.run(host='0.0.0.0', port=8443, ssl_context=('cert.pem', 'key.pem'))
+    app.run(host="0.0.0.0", port=8443, ssl_context=("cert.pem", "key.pem"))
