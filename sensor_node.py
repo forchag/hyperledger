@@ -83,7 +83,17 @@ def main():
         else:
             data = json.dumps(payload).encode('utf-8')
             cid = client.add_bytes(data)
-            record_sensor_data(args.device_id, temp, hum, timestamp, cid)
+            record_sensor_data(
+                args.device_id,
+                temp,
+                hum,
+                soil,
+                ph,
+                light,
+                water,
+                timestamp,
+                cid,
+            )
             payload['cid'] = cid
             data = json.dumps(payload).encode('utf-8')
 

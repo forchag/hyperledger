@@ -373,8 +373,17 @@ def upload_file():
     res = client.add(file)
     cid = res['Hash']
     # Record the CID on the blockchain (stub implementation)
-    record_sensor_data(id=file.filename, temperature=0, humidity=0,
-                       timestamp=datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'), cid=cid)
+    record_sensor_data(
+        id=file.filename,
+        temperature=0,
+        humidity=0,
+        soil_moisture=0,
+        ph=0,
+        light=0,
+        water_level=0,
+        timestamp=datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+        cid=cid,
+    )
     return jsonify({'cid': cid})
 
 
@@ -556,6 +565,10 @@ def record_sensor():
         data.get('id', 'unknown'),
         float(data.get('temperature', 0)),
         float(data.get('humidity', 0)),
+        float(data.get('soil_moisture', 0)),
+        float(data.get('ph', 0)),
+        float(data.get('light', 0)),
+        float(data.get('water_level', 0)),
         data['timestamp'],
         cid,
     )

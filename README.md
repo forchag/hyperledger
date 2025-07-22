@@ -8,6 +8,8 @@ This directory contains a minimal example of integrating Hyperledger Fabric with
 
 * Registering devices
 * Recording sensor data with IPFS CIDs
+  including soil moisture, pH, light
+  and water level measurements
 * Logging network events
 * Sending permissioned messages between devices
 
@@ -63,6 +65,8 @@ every few seconds. By default it sends the readings to the Flask API over HTTP
 but it can also transmit them over LoRa or use both channels for redundancy via
 the `--mode` option. These scripts are stubs and can be run on a Raspberry Pi
 with appropriate radio modules attached.
+The chaincode now records all of these metrics so that agronomists can
+track detailed conditions directly on the ledger.
 
 ## Connecting sensors to a Raspberry Pi
 
