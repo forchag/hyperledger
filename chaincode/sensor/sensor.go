@@ -11,15 +11,15 @@ type SmartContract struct {
 }
 
 type SensorData struct {
-        ID          string  `json:"id"`
-        Temperature float64 `json:"temperature"`
-        Humidity    float64 `json:"humidity"`
-        SoilMoisture float64 `json:"soil_moisture"`
-        PH          float64 `json:"ph"`
-        Light       float64 `json:"light"`
-        WaterLevel  float64 `json:"water_level"`
-        Timestamp   string  `json:"timestamp"`
-        CID         string  `json:"cid"`
+	ID           string  `json:"id"`
+	Temperature  float64 `json:"temperature"`
+	Humidity     float64 `json:"humidity"`
+	SoilMoisture float64 `json:"soil_moisture"`
+	PH           float64 `json:"ph"`
+	Light        float64 `json:"light"`
+	WaterLevel   float64 `json:"water_level"`
+	Timestamp    string  `json:"timestamp"`
+	Payload      string  `json:"payload"`
 }
 
 type Device struct {
@@ -75,7 +75,7 @@ func (s *SmartContract) deviceExists(ctx contractapi.TransactionContextInterface
 	return bytes != nil, nil
 }
 
-func (s *SmartContract) RecordSensorData(ctx contractapi.TransactionContextInterface, id string, temperature float64, humidity float64, soilMoisture float64, ph float64, light float64, waterLevel float64, timestamp string, cid string) error {
+func (s *SmartContract) RecordSensorData(ctx contractapi.TransactionContextInterface, id string, temperature float64, humidity float64, soilMoisture float64, ph float64, light float64, waterLevel float64, timestamp string, payload string) error {
 	exists, err := s.deviceExists(ctx, id)
 	if err != nil {
 		return err
@@ -83,17 +83,17 @@ func (s *SmartContract) RecordSensorData(ctx contractapi.TransactionContextInter
 	if !exists {
 		return fmt.Errorf("device not registered")
 	}
-        data := SensorData{
-                ID:          id,
-                Temperature: temperature,
-                Humidity:    humidity,
-                SoilMoisture: soilMoisture,
-                PH:          ph,
-                Light:       light,
-                WaterLevel:  waterLevel,
-                Timestamp:   timestamp,
-                CID:         cid,
-        }
+	data := SensorData{
+		ID:           id,
+		Temperature:  temperature,
+		Humidity:     humidity,
+		SoilMoisture: soilMoisture,
+		PH:           ph,
+		Light:        light,
+		WaterLevel:   waterLevel,
+		Timestamp:    timestamp,
+		Payload:      payload,
+	}
 	bytes, err := json.Marshal(data)
 	if err != nil {
 		return err

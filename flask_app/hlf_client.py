@@ -1,6 +1,11 @@
 """Simple placeholder Hyperledger Fabric client."""
 
 from datetime import datetime
+import base64
+import json
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
+from cryptography.hazmat.primitives import serialization
 
 # This file is a stub demonstrating how a client might interact with
 # a Fabric network to invoke the sensor chaincode.
@@ -18,6 +23,10 @@ ATTESTATIONS = []
 BLOCK_EVENTS = []
 CURRENT_BLOCK = 0
 
+# RSA key pair for encrypting sensor payloads
+PRIVATE_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+PUBLIC_KEY = PRIVATE_KEY.public_key()
+
 
 def log_block_event(message):
     """Record a blockchain operation event with timestamp."""
@@ -30,12 +39,35 @@ def log_block_event(message):
         del BLOCK_EVENTS[0]
 
 
+def encrypt_payload(data: dict) -> str:
+    """Encrypt a JSON payload using the RSA public key."""
+    plaintext = json.dumps(data).encode("utf-8")
+    ciphertext = PUBLIC_KEY.encrypt(
+        plaintext,
+        padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None),
+    )
+    return base64.b64encode(ciphertext).decode("utf-8")
+
+
+def decrypt_payload(enc: str) -> dict:
+    """Decrypt a base64 encoded payload using the RSA private key."""
+    try:
+        ciphertext = base64.b64decode(enc.encode("utf-8"))
+        plaintext = PRIVATE_KEY.decrypt(
+            ciphertext,
+            padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None),
+        )
+        return json.loads(plaintext.decode("utf-8"))
+    except Exception:
+        return {}
+
+
 def get_block_events():
     """Return recent blockchain events."""
     return BLOCK_EVENTS
 
 
-def record_sensor_data(id, temperature, humidity, soil_moisture, ph, light, water_level, timestamp, cid):
+def record_sensor_data(id, temperature, humidity, soil_moisture, ph, light, water_level, timestamp, payload):
     """Submit RecordSensorData transaction and keep a history of readings.
 
     Parameters correspond to the fields stored by the chaincode, providing
@@ -55,11 +87,11 @@ def record_sensor_data(id, temperature, humidity, soil_moisture, ph, light, wate
         'light': light,
         'water_level': water_level,
         'timestamp': timestamp,
-        'cid': cid,
+        'payload': encrypt_payload(payload) if isinstance(payload, dict) else payload,
     }
     SENSOR_DATA.setdefault(id, []).append(entry)
     print(
-        f"[HLF] record {id} {temperature} {humidity} {soil_moisture} {ph} {light} {water_level} {timestamp} {cid}"
+        f"[HLF] record {id} {temperature} {humidity} {soil_moisture} {ph} {light} {water_level} {timestamp}"
     )
 
 def register_device(id, owner):

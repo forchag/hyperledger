@@ -6,7 +6,6 @@ import random
 import time
 from datetime import datetime
 
-import ipfshttpclient
 import requests
 
 from flask_app.hlf_client import record_sensor_data
@@ -52,7 +51,6 @@ def main():
                         help="HTTP endpoint for sensor data")
     args = parser.parse_args()
 
-    client = ipfshttpclient.connect('/dns/localhost/tcp/5001/http')
     lora = DummyLoRa() if args.mode in ("lora", "both") else None
     session = requests.Session() if args.mode in ("http", "both") else None
 
@@ -81,8 +79,6 @@ def main():
             except Exception as e:
                 print('HTTP send failed:', e)
         else:
-            data = json.dumps(payload).encode('utf-8')
-            cid = client.add_bytes(data)
             record_sensor_data(
                 args.device_id,
                 temp,
@@ -92,9 +88,8 @@ def main():
                 light,
                 water,
                 timestamp,
-                cid,
+                payload,
             )
-            payload['cid'] = cid
             data = json.dumps(payload).encode('utf-8')
 
             if lora:

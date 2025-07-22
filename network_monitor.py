@@ -40,7 +40,6 @@ def monitor():
                 "light",
                 "water_level",
                 "timestamp",
-                "cid",
             )):
                 record_sensor_data(
                     data["id"],
@@ -51,7 +50,7 @@ def monitor():
                     float(data["light"]),
                     float(data["water_level"]),
                     data["timestamp"],
-                    data["cid"],
+                    data,
                 )
         if time.time() - last_report >= 60:
             if known_nodes:

@@ -1,14 +1,13 @@
 # Hyperledger Farm Network
 
-This directory contains a minimal example of integrating Hyperledger Fabric with IPFS and LoRa sensor nodes. The Fabric chaincode stores device registrations, sensor readings and network events.
+This directory contains a minimal example of integrating Hyperledger Fabric with LoRa sensor nodes. The Fabric chaincode stores device registrations, sensor readings and network events.
 
 ## Chaincode
 
 `chaincode/sensor/sensor.go` implements a Fabric chaincode that allows:
 
 * Registering devices
-* Recording sensor data with IPFS CIDs
-  including soil moisture, pH, light
+* Recording encrypted sensor data for soil moisture, pH, light
   and water level measurements
 * Logging network events
 * Sending permissioned messages between devices
@@ -38,7 +37,7 @@ blockchain.
 
 ## Flask GUI
 
-`flask_app/app.py` exposes a small HTTPS GUI and REST API to register devices, upload files, record sensor data and verify stored information. It expects a local IPFS daemon running on `localhost:5001` and a Fabric gateway configured via the stub `hlf_client` module. The dashboard shows how many nodes are registered and offers options to verify and recover data stored on IPFS.
+`flask_app/app.py` exposes a small HTTPS GUI and REST API to register devices, upload files, record sensor data and verify stored information. The dashboard shows how many nodes are registered and offers options to inspect stored data.
 An additional page available at `/integrity` lets administrators export sensor
 data as CSV and verify uploaded datasets against the hashes stored on the
 blockchain.
@@ -46,7 +45,7 @@ blockchain.
 Start the app with:
 
 ```bash
-pip install flask ipfshttpclient
+pip install flask cryptography
 openssl req -newkey rsa:2048 -nodes -keyout key.pem -x509 -days 365 -out cert.pem -subj "/CN=farm"
 python flask_app/app.py
 ```
@@ -160,21 +159,17 @@ must edit the compose files under `fabric-samples/test-network` so that
 peers and orderers reference the correct remote addresses.
 
 6. **Start supporting services**
-   Open a new terminal and run the IPFS daemon:
+   Launch the Flask API from the repository root:
    ```bash
-   ipfs daemon
+   pip install flask cryptography
+   python flask_app/app.py
    ```
-   In another terminal launch the Flask API from the repository root:
-   ```bash
-   pip install flask ipfshttpclient
-    python flask_app/app.py
-    ```
 7. **Interact with the network**
     Open `https://192.168.0.163:8443/` in your browser to use the dashboard or invoke the tools in the `tools` directory.
 
 ### Adding another Raspberry Pi
 
-Clone this repository on the new Pi (for example `192.168.0.199` or `192.168.0.200`) and repeat the dependency installation. Start the IPFS daemon and launch the Flask app:
+Clone this repository on the new Pi (for example `192.168.0.199` or `192.168.0.200`) and repeat the dependency installation. Launch the Flask app:
 
 ```bash
 ipfs daemon
@@ -183,7 +178,7 @@ python flask_app/app.py
 
 Visit `https://<new-pi-ip>:8443/` to access the dashboard of that node. Once two or more nodes are registered the first Pi automatically starts the Fabric network.
 
-**Important:** Do **not** run `./test_network.sh` or attempt to deploy the chaincode from additional nodes. The sample test network is designed to run on a single machine. Starting it again on another Pi will spin up a second set of peers and orderers that cannot communicate with the first, causing "chaincode failed" errors during installation. Only the first node should host the Fabric containers. Other nodes simply run the IPFS daemon and Flask dashboard so they can talk to the blockchain through the gateway on the first Pi.
+**Important:** Do **not** run `./test_network.sh` or attempt to deploy the chaincode from additional nodes. The sample test network is designed to run on a single machine. Starting it again on another Pi will spin up a second set of peers and orderers that cannot communicate with the first, causing "chaincode failed" errors during installation. Only the first node should host the Fabric containers. Other nodes simply run the Flask dashboard so they can talk to the blockchain through the gateway on the first Pi.
 
 8. **Stop the network**
    ```bash
@@ -191,7 +186,7 @@ Visit `https://<new-pi-ip>:8443/` to access the dashboard of that node. Once two
    ./network.sh down
    ```
 
-The `tools/data_tool.py` script provides a command line utility to upload sensor payloads to IPFS and store the resulting CID on chain. It can also retrieve and verify stored data:
+The `tools/data_tool.py` script provides a command line utility to upload sensor payloads directly to the blockchain and retrieve them:
 
 ```bash
 python tools/data_tool.py upload sensor-1 reading.json
@@ -199,13 +194,7 @@ python tools/data_tool.py retrieve sensor-1
 python tools/data_tool.py verify sensor-1
 ```
 
-Simulated recovery of lost IPFS blocks is performed with:
-
-```bash
-python tools/data_tool.py recover sensor-1
-```
-
-These examples assume an IPFS daemon is running locally and that the chaincode has been deployed as described above. The dashboard offers buttons for verifying and recovering data using the same logic.
+These examples assume the chaincode has been deployed as described above. The dashboard offers buttons for verifying and recovering data using the same logic.
 
 ## Blockchain design
 
@@ -310,14 +299,11 @@ contract interface.
 
 ## Data storage and recovery
 
-Sensor payloads are written to **IPFS**, giving each reading a content
-identifier (CID).  Only the CID and basic metadata are kept on the
-blockchain.  Every node can pin those CIDs to locally replicate the
-actual sensor files.  If a device or IPFS node fails, another node can
-retrieve the CIDs from the ledger and pin the data again.  The script
-`tools/node_recovery.py` automates this process for a freshly started
-node.  Once the historical CIDs are pinned the node continues to store
-new sensor data just like its peers.
+All sensor data is now stored directly on the blockchain.  Before being
+committed each payload is encrypted with an RSA public key so that only
+nodes possessing the private key can decode it.  The helper script
+`tools/node_recovery.py` prints the encrypted payloads for auditing
+purposes.
 
 ## Extended dashboard
 

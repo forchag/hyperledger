@@ -2,18 +2,14 @@ import argparse
 import json
 from datetime import datetime
 
-import ipfshttpclient
 
 from flask_app import hlf_client
 
 
 def upload(sensor_id: str, json_file: str):
-    """Upload a JSON sensor payload to IPFS and record metadata on-chain."""
-    with open(json_file, 'rb') as fh:
-        data = fh.read()
-    client = ipfshttpclient.connect('/dns/localhost/tcp/5001/http')
-    cid = client.add_bytes(data)
-    payload = json.loads(data.decode('utf-8'))
+    """Upload a JSON sensor payload and record it on-chain."""
+    with open(json_file, 'r', encoding='utf-8') as fh:
+        payload = json.load(fh)
     payload.setdefault('timestamp', datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'))
     hlf_client.record_sensor_data(
         sensor_id,
@@ -24,9 +20,9 @@ def upload(sensor_id: str, json_file: str):
         payload.get('light', 0),
         payload.get('water_level', 0),
         payload['timestamp'],
-        cid,
+        payload,
     )
-    print('Uploaded with CID', cid)
+    print('Uploaded record')
 
 
 def retrieve(sensor_id: str):
@@ -35,10 +31,8 @@ def retrieve(sensor_id: str):
     if not data:
         print('No sensor data found')
         return
-    cid = data['cid']
-    client = ipfshttpclient.connect('/dns/localhost/tcp/5001/http')
-    content = client.cat(cid)
-    print(content.decode('utf-8'))
+    payload = hlf_client.decrypt_payload(data['payload'])
+    print(json.dumps(payload, indent=2))
 
 
 def verify(sensor_id: str):
@@ -47,31 +41,21 @@ def verify(sensor_id: str):
     if not data:
         print('No sensor data found')
         return
-    cid = data['cid']
-    client = ipfshttpclient.connect('/dns/localhost/tcp/5001/http')
-    content = client.cat(cid)
-    new_cid = client.add_bytes(content)
-    if cid == new_cid:
+    payload = hlf_client.decrypt_payload(data['payload'])
+    if payload:
         print('Data integrity verified')
     else:
         print('Data integrity check FAILED')
 
 
 def recover(sensor_id: str):
-    """Simulate IPFS node failure and recover content."""
+    """Retrieve and print encrypted payload."""
     data = hlf_client.get_sensor_data(sensor_id)
     if not data:
         print('No sensor data found')
         return
-    cid = data['cid']
-    client = ipfshttpclient.connect('/dns/localhost/tcp/5001/http')
-    content = client.cat(cid)
-    print('Fetched content, re-adding to IPFS...')
-    new_cid = client.add_bytes(content)
-    if cid == new_cid:
-        print('Recovery successful - CID matches')
-    else:
-        print('Recovery created new CID:', new_cid)
+    payload = hlf_client.decrypt_payload(data['payload'])
+    print(json.dumps(payload, indent=2))
 
 
 def main():
