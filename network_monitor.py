@@ -31,11 +31,25 @@ def monitor():
                 node_id = data["id"]
                 known_nodes.add(node_id)
                 log_event(node_id, "heartbeat", data["timestamp"])
-            elif all(k in data for k in ("id", "temperature", "humidity", "timestamp", "cid")):
+            elif all(k in data for k in (
+                "id",
+                "temperature",
+                "humidity",
+                "soil_moisture",
+                "ph",
+                "light",
+                "water_level",
+                "timestamp",
+                "cid",
+            )):
                 record_sensor_data(
                     data["id"],
                     float(data["temperature"]),
                     float(data["humidity"]),
+                    float(data["soil_moisture"]),
+                    float(data["ph"]),
+                    float(data["light"]),
+                    float(data["water_level"]),
                     data["timestamp"],
                     data["cid"],
                 )

@@ -19,6 +19,10 @@ def upload(sensor_id: str, json_file: str):
         sensor_id,
         payload.get('temperature', 0),
         payload.get('humidity', 0),
+        payload.get('soil_moisture', 0),
+        payload.get('ph', 0),
+        payload.get('light', 0),
+        payload.get('water_level', 0),
         payload['timestamp'],
         cid,
     )

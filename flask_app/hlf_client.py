@@ -35,8 +35,12 @@ def get_block_events():
     return BLOCK_EVENTS
 
 
-def record_sensor_data(id, temperature, humidity, timestamp, cid):
-    """Submit RecordSensorData transaction and keep a history of readings."""
+def record_sensor_data(id, temperature, humidity, soil_moisture, ph, light, water_level, timestamp, cid):
+    """Submit RecordSensorData transaction and keep a history of readings.
+
+    Parameters correspond to the fields stored by the chaincode, providing
+    a complete snapshot of environmental conditions.
+    """
     global CURRENT_BLOCK
     CURRENT_BLOCK += 1
     log_block_event(f"Creating block {CURRENT_BLOCK}")
@@ -46,11 +50,17 @@ def record_sensor_data(id, temperature, humidity, timestamp, cid):
         'id': id,
         'temperature': temperature,
         'humidity': humidity,
+        'soil_moisture': soil_moisture,
+        'ph': ph,
+        'light': light,
+        'water_level': water_level,
         'timestamp': timestamp,
         'cid': cid,
     }
     SENSOR_DATA.setdefault(id, []).append(entry)
-    print(f"[HLF] record {id} {temperature} {humidity} {timestamp} {cid}")
+    print(
+        f"[HLF] record {id} {temperature} {humidity} {soil_moisture} {ph} {light} {water_level} {timestamp} {cid}"
+    )
 
 def register_device(id, owner):
     """Register a device with the ledger."""
