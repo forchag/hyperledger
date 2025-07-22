@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify, render_template_string, make_response
-import ipfshttpclient
 import json
+import base64
 from datetime import datetime
 import subprocess
 import hashlib
@@ -32,7 +32,6 @@ import threading
 from incident_responder import watch as incident_watch
 
 app = Flask(__name__)
-client = ipfshttpclient.connect('/dns/localhost/tcp/5001/http')
 
 # Track whether the Fabric network has been started
 BLOCKCHAIN_STARTED = False
@@ -93,7 +92,7 @@ def build_csv(sensor_id=None, start=None, end=None):
         records = get_all_sensor_data(start, end)
     records.sort(key=lambda r: r['timestamp'])
     out = io.StringIO()
-    writer = csv.DictWriter(out, fieldnames=['id', 'temperature', 'humidity', 'timestamp', 'cid'])
+    writer = csv.DictWriter(out, fieldnames=['id', 'temperature', 'humidity', 'timestamp', 'payload'])
     writer.writeheader()
     for r in records:
         writer.writerow(r)
@@ -370,9 +369,11 @@ def upload_file():
     if 'file' not in request.files:
         return 'No file provided', 400
     file = request.files['file']
-    res = client.add(file)
-    cid = res['Hash']
-    # Record the CID on the blockchain (stub implementation)
+    data = base64.b64encode(file.read()).decode('utf-8')
+    payload = {
+        'filename': file.filename,
+        'data': data,
+    }
     record_sensor_data(
         id=file.filename,
         temperature=0,
@@ -382,9 +383,9 @@ def upload_file():
         light=0,
         water_level=0,
         timestamp=datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
-        cid=cid,
+        payload=payload,
     )
-    return jsonify({'cid': cid})
+    return jsonify({'stored': True})
 
 
 @app.route('/register', methods=['POST'])
@@ -396,39 +397,31 @@ def register():
     check_and_start_blockchain()
     return 'registered'
 
-@app.route('/retrieve/<cid>', methods=['GET'])
-def retrieve_file(cid):
-    try:
-        data = client.cat(cid)
-        return data
-    except Exception as e:
-        return str(e), 500
+@app.route('/retrieve/<device_id>', methods=['GET'])
+def retrieve_file(device_id):
+    data = get_sensor_data(device_id)
+    if not data or 'payload' not in data:
+        return 'No sensor data found', 404
+    payload = hlf_client.decrypt_payload(data['payload'])
+    return jsonify(payload)
 
 
 @app.route('/verify/<sensor_id>', methods=['GET'])
 def verify(sensor_id):
     data = get_sensor_data(sensor_id)
-    cid = data['cid'] if data else None
-    if not cid:
+    if not data or 'payload' not in data:
         return 'No sensor data found', 404
-    content = client.cat(cid)
-    new_cid = client.add_bytes(content)
-    if new_cid == cid:
-        return 'Data integrity verified'
-    return 'Data integrity check failed', 500
+    payload = hlf_client.decrypt_payload(data['payload'])
+    return jsonify({'valid': bool(payload)})
 
 
 @app.route('/recover/<sensor_id>', methods=['GET'])
 def recover(sensor_id):
     data = get_sensor_data(sensor_id)
-    if not data:
+    if not data or 'payload' not in data:
         return 'No sensor data found', 404
-    cid = data['cid']
-    content = client.cat(cid)
-    new_cid = client.add_bytes(content)
-    if new_cid == cid:
-        return 'Recovery successful'
-    return jsonify({'old_cid': cid, 'new_cid': new_cid})
+    payload = hlf_client.decrypt_payload(data['payload'])
+    return jsonify(payload)
 
 
 @app.route('/merkle/<int:block_num>')
@@ -559,8 +552,6 @@ def record_sensor():
     data['node_ip'] = request.remote_addr
     data['timestamp'] = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
     js = json.dumps(data).encode('utf-8')
-    ipfs_res = client.add_bytes(js)
-    cid = ipfs_res
     record_sensor_data(
         data.get('id', 'unknown'),
         float(data.get('temperature', 0)),
@@ -570,9 +561,9 @@ def record_sensor():
         float(data.get('light', 0)),
         float(data.get('water_level', 0)),
         data['timestamp'],
-        cid,
+        data,
     )
-    return jsonify({'cid': cid})
+    return jsonify({'stored': True})
 
 
 # ----------------- Additional dashboard pages -----------------
@@ -641,7 +632,7 @@ def storage_data():
     out = []
     for dev in list_devices():
         for rec in get_sensor_history(dev):
-            out.append({'id': dev, 'cid': rec.get('cid'), 'timestamp': rec.get('timestamp')})
+            out.append({'id': dev, 'payload': rec.get('payload'), 'timestamp': rec.get('timestamp')})
     return jsonify(out)
 
 
