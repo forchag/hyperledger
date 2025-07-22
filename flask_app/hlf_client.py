@@ -30,10 +30,12 @@ PUBLIC_KEY = PRIVATE_KEY.public_key()
 
 def log_block_event(message):
     """Record a blockchain operation event with timestamp."""
-    BLOCK_EVENTS.append({
-        'time': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
-        'message': message,
-    })
+    BLOCK_EVENTS.append(
+        {
+            "time": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "message": message,
+        }
+    )
     # Keep last 50 events
     if len(BLOCK_EVENTS) > 50:
         del BLOCK_EVENTS[0]
@@ -44,7 +46,11 @@ def encrypt_payload(data: dict) -> str:
     plaintext = json.dumps(data).encode("utf-8")
     ciphertext = PUBLIC_KEY.encrypt(
         plaintext,
-        padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None),
+        padding.OAEP(
+            mgf=padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None,
+        ),
     )
     return base64.b64encode(ciphertext).decode("utf-8")
 
@@ -55,7 +61,11 @@ def decrypt_payload(enc: str) -> dict:
         ciphertext = base64.b64decode(enc.encode("utf-8"))
         plaintext = PRIVATE_KEY.decrypt(
             ciphertext,
-            padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None),
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None,
+            ),
         )
         return json.loads(plaintext.decode("utf-8"))
     except Exception:
@@ -67,7 +77,9 @@ def get_block_events():
     return BLOCK_EVENTS
 
 
-def record_sensor_data(id, temperature, humidity, soil_moisture, ph, light, water_level, timestamp, payload):
+def record_sensor_data(
+    id, temperature, humidity, soil_moisture, ph, light, water_level, timestamp, payload
+):
     """Submit RecordSensorData transaction and keep a history of readings.
 
     Parameters correspond to the fields stored by the chaincode, providing
@@ -79,20 +91,21 @@ def record_sensor_data(id, temperature, humidity, soil_moisture, ph, light, wate
     log_block_event(f"Hashing block {CURRENT_BLOCK}")
     log_block_event(f"Saving block {CURRENT_BLOCK}")
     entry = {
-        'id': id,
-        'temperature': temperature,
-        'humidity': humidity,
-        'soil_moisture': soil_moisture,
-        'ph': ph,
-        'light': light,
-        'water_level': water_level,
-        'timestamp': timestamp,
-        'payload': encrypt_payload(payload) if isinstance(payload, dict) else payload,
+        "id": id,
+        "temperature": temperature,
+        "humidity": humidity,
+        "soil_moisture": soil_moisture,
+        "ph": ph,
+        "light": light,
+        "water_level": water_level,
+        "timestamp": timestamp,
+        "payload": encrypt_payload(payload) if isinstance(payload, dict) else payload,
     }
     SENSOR_DATA.setdefault(id, []).append(entry)
     print(
         f"[HLF] record {id} {temperature} {humidity} {soil_moisture} {ph} {light} {water_level} {timestamp}"
     )
+
 
 def register_device(id, owner):
     """Register a device with the ledger."""
@@ -100,33 +113,40 @@ def register_device(id, owner):
         DEVICES.append(id)
     print(f"[HLF] register device {id} owner {owner}")
 
+
 def log_event(device_id, event_type, timestamp):
     """Log a network event on the ledger."""
     print(f"[HLF] event {device_id} {event_type} {timestamp}")
 
 
-def log_security_incident(device_id, description, timestamp, *, score=None, payload=None):
+def log_security_incident(
+    device_id, description, timestamp, *, score=None, payload=None
+):
     """Log a security incident on the ledger."""
     incident = {
-        'device_id': device_id,
-        'description': description,
-        'timestamp': timestamp,
+        "device_id": device_id,
+        "description": description,
+        "timestamp": timestamp,
     }
     if score is not None:
-        incident['score'] = score
+        incident["score"] = score
     if payload is not None:
-        incident['payload'] = payload
+        incident["payload"] = payload
     INCIDENTS.append(incident)
-    print(f"[HLF] security incident {device_id} {description} {timestamp} score={score}")
+    print(
+        f"[HLF] security incident {device_id} {description} {timestamp} score={score}"
+    )
 
 
 def attest_device(device_id, status, timestamp):
     """Record a device attestation result."""
-    ATTESTATIONS.append({
-        'device_id': device_id,
-        'status': status,
-        'timestamp': timestamp,
-    })
+    ATTESTATIONS.append(
+        {
+            "device_id": device_id,
+            "status": status,
+            "timestamp": timestamp,
+        }
+    )
     print(f"[HLF] attestation {device_id} {status} {timestamp}")
 
 
@@ -159,9 +179,9 @@ def get_sensor_history(sensor_id, start=None, end=None):
     """Return all recorded readings for a device optionally filtered by date."""
     records = SENSOR_DATA.get(sensor_id, [])
     if start:
-        records = [r for r in records if r['timestamp'] >= start]
+        records = [r for r in records if r["timestamp"] >= start]
     if end:
-        records = [r for r in records if r['timestamp'] <= end]
+        records = [r for r in records if r["timestamp"] <= end]
     return records
 
 
@@ -198,22 +218,15 @@ def get_state_on(date: str):
 def query_blockchain_info():
     """Return basic ledger info such as height and current block hash."""
     print("[HLF] query blockchain info")
-    return {
-        'height': 0,
-        'current_hash': '0x0'
-    }
+    return {"height": 0, "current_hash": "0x0"}
 
 
 def get_block(block_number):
     """Retrieve a specific block."""
     print(f"[HLF] get block {block_number}")
     return {
-        'header': {
-            'number': block_number,
-            'previous_hash': '0x0',
-            'data_hash': '0x0'
-        },
-        'data': []
+        "header": {"number": block_number, "previous_hash": "0x0", "data_hash": "0x0"},
+        "data": [],
     }
 
 

@@ -68,7 +68,7 @@ def verify(m: int, sig: int, key: RSAKey) -> bool:
 
 
 def hash_message(msg: bytes) -> int:
-    return int.from_bytes(sha256(msg).digest(), 'big')
+    return int.from_bytes(sha256(msg).digest(), "big")
 
 
 def verify_single(tx: Tuple[bytes, int], key: RSAKey) -> bool:
@@ -77,7 +77,9 @@ def verify_single(tx: Tuple[bytes, int], key: RSAKey) -> bool:
     return verify(m, sig, key)
 
 
-def verify_transactions_parallel(txs: List[Tuple[bytes, int]], key: RSAKey, workers: int = None) -> List[bool]:
+def verify_transactions_parallel(
+    txs: List[Tuple[bytes, int]], key: RSAKey, workers: int = None
+) -> List[bool]:
     """Verify multiple transactions in parallel."""
     with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as ex:
         futures = [ex.submit(verify_single, tx, key) for tx in txs]

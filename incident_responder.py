@@ -7,15 +7,14 @@ def watch():
     seen = set()
     while True:
         for inc in get_incidents():
-            key = (inc['device_id'], inc['timestamp'])
+            key = (inc["device_id"], inc["timestamp"])
             if key in seen:
                 continue
             seen.add(key)
-            if not is_quarantined(inc['device_id']):
-                quarantine_device(inc['device_id'])
+            if not is_quarantined(inc["device_id"]):
+                quarantine_device(inc["device_id"])
         time.sleep(5)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     watch()
-
