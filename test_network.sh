@@ -11,6 +11,7 @@ fi
 
 # Vendor Go dependencies so the peer can package the chaincode offline
 (cd chaincode/sensor && go mod vendor)
+(cd chaincode/agri && go mod vendor)
 
 cd fabric-samples/test-network
 
@@ -23,4 +24,6 @@ cd fabric-samples/test-network
 # Deploy the sensor chaincode from this repository
 cp -r ../../chaincode/sensor ./chaincode/
 ./network.sh deployCC -ccn sensor -ccp ./chaincode/sensor -ccl go
+cp -r ../../chaincode/agri ./chaincode/
+./network.sh deployCC -ccn agri -ccp ./chaincode/agri -ccl go
 
