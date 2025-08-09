@@ -2,6 +2,36 @@
 
 This document outlines how to store 30 minute sensor summaries on-chain while keeping data volume small and ensuring cryptographic integrity. The approach relies on CRT compression, RSA-CRT signatures, and Hyperledger Fabric with PBFT consensus.
 
+## Phase 1: Network Architecture & Consensus
+
+### Farm Layout
+The pilot deployment targets a **1 km × 1 km** vegetable farm (100 hectares) divided into four equal quadrants. Each quadrant spans 500 m × 500 m and is treated as an independent zone for network routing and governance.
+
+### Device Mapping
+The network follows a hierarchical tree:
+
+```
+Farm Server (Central Receiver)
+├── Gateway-North
+│   ├── N1 … N25 sensor nodes
+├── Gateway-South
+│   ├── S1 … S25 sensor nodes
+├── Gateway-East
+│   ├── E1 … E25 sensor nodes
+└── Gateway-West
+    ├── W1 … W25 sensor nodes
+```
+
+Gateways sit at zone edges and aggregate traffic from their 25 associated sensors before forwarding results upstream.
+
+### Hierarchical Consensus
+1. The **farm server** initiates a collection round and broadcasts the request to all gateways.
+2. Each **gateway** relays the request to its sensors. Sensors measure, split the reading into CRT residues under small moduli (e.g., 101, 103, 107) and return the residues.
+3. Gateways validate residues locally and reach intra-zone consensus (majority acknowledgement) before forwarding them to the farm server.
+4. The **farm server** reconstructs the original values using the Chinese Remainder Theorem, verifies signatures, and assembles the final block.
+
+Using CRT keeps per-sensor state to just a few bytes, allowing parallel transactions and enabling memory-constrained IoT devices to participate in block validation.
+
 ## 1. Hardware Configuration
 - Raspberry Pi 4 (or similar SBC) as the edge node.
 - Install packages and clone edge processor:
