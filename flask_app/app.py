@@ -469,6 +469,7 @@ def status_page():
             body { font-family: Arial, sans-serif; padding: 20px; }
             h1 { color: #2c3e50; }
             .counter { font-size: 1.2em; margin-bottom: 10px; }
+            #node-list { margin-top: 10px; }
             </style>
             <script>
             async function load() {
@@ -476,6 +477,12 @@ def status_page():
                 const data = await res.json();
                 document.getElementById('incident-count').innerText = data.incidents.length;
                 document.getElementById('quarantine-count').innerText = data.quarantined.length;
+
+                const nodeRes = await fetch('/discover');
+                const nodeData = await nodeRes.json();
+                document.getElementById('node-count').innerText = nodeData.count;
+                document.getElementById('node-list').innerHTML =
+                    nodeData.nodes.map(n => `<li>${n.ip}</li>`).join('');
             }
             window.onload = load;
             </script>
@@ -484,6 +491,8 @@ def status_page():
             <h1>Network Status</h1>
             <div class="counter">Incidents: <span id="incident-count">0</span></div>
             <div class="counter">Quarantined devices: <span id="quarantine-count">0</span></div>
+            <div class="counter">Connected nodes: <span id="node-count">0</span></div>
+            <ul id="node-list"></ul>
         </body>
         </html>
         """
