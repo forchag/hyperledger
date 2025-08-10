@@ -4,25 +4,30 @@ Demonstrates how constrained IoT sensors can split readings into
 Chinese Remainder Theorem (CRT) residues and participate in a
 hierarchical consensus. Sensors send residues to zone gateways which
 forward validated values to the farm server for block creation.
+
+The core CRT arithmetic is delegated to :mod:`crt_parallel` so that all
+components share the same implementation for decomposing and
+reconstructing values.
 """
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
 
-MODULI = (101, 103, 107)  # pairwise coprime; residues fit in a byte
+from crt_parallel import crt_decompose, crt_reconstruct
+
+# Pairwise coprime moduli; residues fit in a byte
+MODULI = (101, 103, 107)
+
 
 def crt_split(value: float) -> List[int]:
+    """Return residues representing ``value`` to two decimal places."""
     scaled = int(value * 100)
-    return [scaled % m for m in MODULI]
+    return crt_decompose(scaled, MODULI)
 
-def crt_reconstruct(residues: List[int]) -> float:
-    M = 1
-    for m in MODULI:
-        M *= m
-    total = 0
-    for r, m in zip(residues, MODULI):
-        Mi = M // m
-        total += r * Mi * pow(Mi, -1, m)
-    return (total % M) / 100.0
+
+def crt_value(residues: List[int]) -> float:
+    """Recover original value from residues produced by :func:`crt_split`."""
+    scaled = crt_reconstruct(residues, MODULI)
+    return scaled / 100.0
 
 @dataclass
 class SensorNode:
@@ -53,7 +58,7 @@ class FarmServer:
         self.received: Dict[Tuple[str, str], float] = {}
 
     def receive(self, zone_id: str, sensor_id: str, residues: List[int]) -> None:
-        value = crt_reconstruct(residues)
+        value = crt_value(residues)
         self.received[(zone_id, sensor_id)] = value
 
 
