@@ -3,15 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Dict
 
-# Stub implementation of Chinese Remainder Theorem solver.
-# In this simplified scenario, the modulus list contains a single value,
-# so we simply return the first residue.
-def crt_solve(residues: List[int], moduli: List[int]) -> int:
-    if not residues:
-        raise ValueError("Residues required")
-    return residues[0]
+from crt_agri import CRTResidues, recover_values
 
 # Constants used by the decision algorithm.
 CROP_DB: Dict[str, Dict[str, float]] = {
@@ -33,14 +27,17 @@ def analyze_zone(report: Dict, weather: Dict) -> Dict:
     Returns:
         Mapping with irrigation deficit, priority and duration.
     """
-    mean_moisture = crt_solve([report["residues"][0]], [65521]) / 100.0
+    residues = CRTResidues(*report["residues"])
+    recovered = recover_values(residues)
+    mean_moisture = recovered["mean"]
+    std_moisture = recovered["std"]
     crop_threshold = CROP_DB.get(report["crop_type"], {}).get("moisture", 0)
     deficit = max(0.0, (crop_threshold - mean_moisture)) * ZONE_AREA
 
     if weather.get("rain_1h", 0) > 5:  # millimeters
         deficit *= 0.3
 
-    priority = report["moisture_std"] * deficit
+    priority = std_moisture * deficit
     flow_rate = FLOW_RATES.get(report["zone_id"], DEFAULT_FLOW_RATE)
     duration = deficit / flow_rate if flow_rate else 0
 
