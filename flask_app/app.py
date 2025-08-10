@@ -30,6 +30,7 @@ from hlf_client import (
 
 import threading
 from incident_responder import watch as incident_watch
+from nft_traceability import AgriNFT, MockBlockchain, verify_product
 
 app = Flask(__name__)
 
@@ -39,6 +40,9 @@ BLOCKCHAIN_STARTED = False
 # Store recent HTTP access events
 ACCESS_LOG = []
 
+
+TRACE_CHAIN = MockBlockchain()
+TRACE_CHAIN.add_nft(AgriNFT(token_id=1, produce_type="Tomato", harvest_date=20250730, zone_ids=[12, 18], merkle_roots=["0x3a7f...", "0x8c2d..."], quality_score=98, storage_conditions="4-8C"))
 
 @app.before_request
 def log_access():
@@ -675,6 +679,15 @@ def recovery_page():
 def simulate_recovery():
     count = sum(len(get_sensor_history(d)) for d in list_devices())
     return jsonify({"message": f"Replicated {count} records"})
+
+
+@app.route("/verify-product/<int:nft_id>")
+def verify_product_route(nft_id):
+    try:
+        result = verify_product(nft_id, TRACE_CHAIN)
+    except KeyError:
+        return jsonify({"error": "NFT not found"}), 404
+    return jsonify({"nft_id": nft_id, "result": result})
 
 
 @app.route("/access-log")
