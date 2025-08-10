@@ -2,67 +2,51 @@
 
 ```mermaid
 graph LR
-  %% ===== INPUT: ORIGINAL VALUES =====
-  OV["Original Sensor Values"] --> SCALE[Scaling]
-  
-  subgraph OV["Original Values"]
+  %% ===== INPUT VALUES =====
+  subgraph INPUT["Original Sensor Values"]
     direction TB
-    V1(("Mean Moisture: 45.23%")):::value
-    V2(("Std Dev: 3.18%")):::value
-    V3(("Max Temp: 29.8°C")):::value
-    V4(("Min Temp: 22.1°C")):::value
-    V5(("NPK: [120,45,210] ppm")):::value
-    style OV fill:#e6f7ff,stroke:#91d5ff
+    V1(("Mean Moisture: 45.23%")):::input
+    V2(("Std Dev: 3.18%")):::input
+    V3(("Max Temp: 29.8°C")):::input
+    V4(("Min Temp: 22.1°C")):::input
+    V5(("NPK: [120,45,210] ppm")):::input
   end
 
-  %% ===== SCALING PROCESS =====
-  SCALE --> INT[Integer Conversion]
-  
-  subgraph SCALE["Scaling"]
-    direction LR
-    S1["mean_scaled = 45.23 × 100 = 4523"]:::code
-    S2["std_scaled = 3.18 × 100 = 318"]:::code
-    S3["max_scaled = 29.8 × 100 = 2980"]:::code
-    S4["min_scaled = 22.1 × 100 = 2210"]:::code
-    S5["npk_scaled = 120×10⁶ + 45×10³ + 210 = 120,045,210"]:::code
-    style SCALE fill:#f6ffed,stroke:#b7eb8f
-  end
-
-  %% ===== MODULO OPERATIONS =====
-  INT --> MOD[Modulo Compression]
-  
-  subgraph MOD["Modulo Operations"]
+  INPUT --> SCALE
+  subgraph SCALE["Scale to Integers"]
     direction TB
-    M1["res₁ = 4523 % 65521 = 4523"]:::code
-    M2["res₂ = 318 % 65519 = 318"]:::code
-    M3["res₃ = (2980×10000 + 2210) % 65497 = 29,802,210 % 65497 = 3002"]:::code
-    M4["res₄ = 120,045,210 % 65519 = 28977"]:::code
-    style MOD fill:#ffefe6,stroke:#ffd8bf
+    S1["mean*100 = 4523"]:::process
+    S2["std*100 = 318"]:::process
+    S3["max*10000 + min = 29,802,210"]:::process
+    S4["npk = 120×10⁶ + 45×10³ + 210"]:::process
   end
 
-  %% ===== RESIDUE STORAGE =====
-  MOD --> STORE[Storage]
-  
-  subgraph STORE["Compressed Storage"]
+  SCALE --> MOD
+  subgraph MOD["Modulo with Primes"]
+    direction TB
+    M1["r1 = 4523 % 65521 = 4523"]:::process
+    M2["r2 = 318 % 65519 = 318"]:::process
+    M3["r3 = 29,802,210 % 65497 = 3002"]:::process
+    M4["r4 = 120,045,210 % 65519 = 28977"]:::process
+  end
+
+  MOD --> STORE
+  subgraph STORE["Residue Storage"]
     direction LR
-    R1["res₁: 4523 → 2 bytes"]:::storage
-    R2["res₂: 318 → 2 bytes"]:::storage
-    R3["res₃: 3002 → 2 bytes"]:::storage
-    R4["res₄: 28977 → 2 bytes"]:::storage
-    style STORE fill:#f9f0ff,stroke:#d3adf7
+    R1["r1 → 2 bytes"]:::output
+    R2["r2 → 2 bytes"]:::output
+    R3["r3 → 2 bytes"]:::output
+    R4["r4 → 2 bytes"]:::output
   end
 
-  %% ===== ANNOTATIONS =====
-  ANNOT1[["Moduli Properties:\n- 65521 (prime)\n- 65519 (prime)\n- 65497 (prime)\n- Coprime: GCD=1"]] --> MOD
-  ANNOT2[["Size Reduction:\n- Original: 20 bytes\n- Compressed: 8 bytes\n- Reduction: 60%"]] --> STORE
-  ANNOT3[["Error Analysis:\n- Max Quantization Error: ±0.005%\n- Reconstruction Accuracy: 99.995%"]] --> STORE
+  STORE --> BYTES["Total: 8 bytes"]:::annot
 
-  %% ===== PERFORMANCE =====
-  PERF[["Performance (RPi 4B):\n- Scaling: 0.02 ms\n- Modulo: 0.08 ms\n- Total: 0.10 ms"]] --> STORE
+  AN1[["Moduli Properties:\n- 65521, 65519, 65497\n- Pairwise coprime"]]:::annot --> MOD
+  AN2[["Size Reduction:\n20 bytes → 8 bytes\n60% reduction"]]:::annot --> STORE
+  AN3[["Error Analysis:\nMax quantization ±0.005%"]]:::annot --> STORE
 
-  %% ===== STYLES =====
-  classDef value fill:#e6f7ff,stroke:#91d5ff,stroke-width:2px
-  classDef code fill:#f8f9fa,stroke:#d9d9d9,stroke-width:1px
-  classDef storage fill:#e0f0ff,stroke:#adc6ff,stroke-width:2px
+  classDef input fill:#e6f7ff,stroke:#91d5ff,stroke-width:2px
+  classDef process fill:#f6ffed,stroke:#b7eb8f,stroke-width:1px
+  classDef output fill:#e0f0ff,stroke:#adc6ff,stroke-width:2px
   classDef annot fill:#fffbe6,stroke:#ffe58f,stroke-width:1px
 ```
