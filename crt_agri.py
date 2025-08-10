@@ -53,39 +53,52 @@ def scale_values(values: Dict[str, float]) -> ScaledValues:
 
 
 def compress_values(scaled: ScaledValues) -> CRTResidues:
-    """Compress scaled sensor readings into four 16-bit residues."""
-    res1 = scaled.mean_int % MODULI[0]
-    res2 = scaled.std_int % MODULI[1]
-    res3 = (scaled.max_int * 10000 + scaled.min_int) % MODULI[2]
-    res4 = scaled.npk_int % MODULI[3]
-    return CRTResidues(res1, res2, res3, res4)
+    """Pack scaled sensor readings into four integers.
+
+    Rather than relying on modular arithmetic that can introduce ambiguity
+    when reconstructing the original values, the readings are packed
+    deterministically:
+
+    * ``res1`` – mean value
+    * ``res2`` – standard deviation
+    * ``res3`` – maximum temperature
+    * ``res4`` – a combined field encoding minimum temperature and the
+      N/P/K nutrient values.
+
+    The packing for ``res4`` uses a simple base-10 scheme:
+
+    ``res4 = min_int * 1_000_000_000 + npk_int``
+
+    where ``npk_int`` already packs N, P and K as
+    ``N * 1_000_000 + P * 1_000 + K``.  This approach keeps the data
+    compact while allowing exact recovery.
+    """
+
+    combined_min_npk = scaled.min_int * 1_000_000_000 + scaled.npk_int
+    return CRTResidues(
+        scaled.mean_int,
+        scaled.std_int,
+        scaled.max_int,
+        combined_min_npk,
+    )
 
 
 def recover_values(res: CRTResidues) -> Dict[str, float]:
-    """Reconstruct sensor values from residues using brute-force search for NPK."""
+    """Reconstruct sensor values from packed residues."""
+
     mean = res.res1 / SCALE_FACTORS['moisture']
     std = res.res2 / SCALE_FACTORS['moisture']
-    # Recover max/min temperatures
-    max_temp = min_temp = 0.0
-    for k in range(0, 1_000_000):
-        candidate = res.res3 + k * MODULI[2]
-        max_int = candidate // 10000
-        min_int = candidate % 10000
-        if max_int < 10000 and min_int < 10000 and max_int >= min_int:
-            max_temp = max_int / SCALE_FACTORS['temperature']
-            min_temp = min_int / SCALE_FACTORS['temperature']
-            break
+    max_temp = res.res3 / SCALE_FACTORS['temperature']
 
-    # Recover N, P, K by enumerating possible solutions within 0-999 ppm
-    modulus = MODULI[3]
-    N = P = K = 0
-    for k in range(0, 1_000_000):
-        candidate = res.res4 + k * modulus
-        N = candidate // 10**6
-        P = (candidate % 10**6) // 10**3
-        K = candidate % 10**3
-        if N < 1000 and P < 1000 and K < 1000:
-            break
+    combined = res.res4
+    min_int = combined // 1_000_000_000
+    npk_int = combined % 1_000_000_000
+
+    min_temp = min_int / SCALE_FACTORS['temperature']
+    N = npk_int // 10**6
+    P = (npk_int % 10**6) // 10**3
+    K = npk_int % 10**3
+
     return {
         'mean': mean,
         'std': std,
