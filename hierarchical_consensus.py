@@ -18,22 +18,7 @@ hierarchical demo.
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
 
-from crt_parallel import crt_decompose, crt_reconstruct
-
-# Pairwise coprime moduli; residues fit in a byte
-MODULI = (101, 103, 107)
-
-
-def crt_split(value: float) -> List[int]:
-    """Return residues representing ``value`` to two decimal places."""
-    scaled = int(value * 100)
-    return crt_decompose(scaled, MODULI)
-
-
-def crt_value(residues: List[int]) -> float:
-    """Recover original value from residues produced by :func:`crt_split`."""
-    scaled = crt_reconstruct(residues, MODULI)
-    return scaled / 100.0
+from crt_utils import crt_split, crt_value
 
 @dataclass
 class SensorNode:
