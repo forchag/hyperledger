@@ -8,6 +8,12 @@ forward validated values to the farm server for block creation.
 The core CRT arithmetic is delegated to :mod:`crt_parallel` so that all
 components share the same implementation for decomposing and
 reconstructing values.
+
+The module also exposes :func:`run_advanced_consensus` which wires in the
+more elaborate consensus pipeline from :mod:`advanced_consensus`. This
+allows external callers to exercise Proof-of-Authority, PBFT and
+Federated Byzantine Agreement flows without rewriting the simple
+hierarchical demo.
 """
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
@@ -83,6 +89,19 @@ def simulate() -> None:
     # Farm server reconstructs original values
     for (zone, sensor_id), value in server.received.items():
         print(f"{zone}:{sensor_id} -> {value:.2f}")
+
+
+def run_advanced_consensus(reading: float) -> Dict[str, float]:
+    """Run the advanced consensus pipeline for a single reading."""
+
+    from advanced_consensus import build_demo_network
+
+    root, gateways, sensors = build_demo_network()
+    for sensor in sensors:
+        sensor.submit(reading)
+    for gw in gateways:
+        gw.reach_consensus()
+    return root.finalized
 
 if __name__ == "__main__":
     simulate()
