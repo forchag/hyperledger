@@ -18,25 +18,10 @@ import heapq
 import hashlib
 from math import factorial
 
-from crt_parallel import crt_decompose, crt_reconstruct
-
-# pairwise coprime moduli for CRT residue handling
-MODULI = (101, 103, 107)
+from crt_utils import MODULI, crt_split, crt_value
 
 # explicit reliability target (e.g., 99.999%)
 RELIABILITY_TARGET = 0.99999
-
-
-def crt_split(value: float) -> List[int]:
-    """Split ``value`` into CRT residues scaled to two decimal places."""
-    scaled = int(value * 100)
-    return crt_decompose(scaled, MODULI)
-
-
-def crt_value(residues: List[int]) -> float:
-    """Reconstruct the original value from CRT residues."""
-    scaled = crt_reconstruct(residues, MODULI)
-    return scaled / 100.0
 
 
 def generate_snark_proof(residues: List[int]) -> str:
