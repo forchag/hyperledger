@@ -31,6 +31,7 @@ from hlf_client import (
 import threading
 from incident_responder import watch as incident_watch
 from nft_traceability import AgriNFT, MockBlockchain, verify_product
+from sensor_simulator import build_mapping
 
 app = Flask(__name__)
 
@@ -508,6 +509,26 @@ def connect_page():
     """Serve the sensor connection setup page."""
     template = Path(__file__).resolve().parent.parent / "sensor_connection.html"
     return render_template_string(template.read_text())
+
+
+@app.route("/simulate-ui")
+def simulator_page():
+    """Serve the sensor simulator page."""
+    template = Path(__file__).resolve().parent.parent / "sensor_simulator.html"
+    return render_template_string(template.read_text())
+
+
+@app.route("/simulate", methods=["POST"])
+def start_simulation():
+    """Launch the sensor simulator with the provided configuration."""
+    config = request.get_json() or {}
+    root = Path(__file__).resolve().parent.parent
+    cfg = root / "simulator_config.json"
+    cfg.write_text(json.dumps(config))
+    mapping = build_mapping(config)
+    script = root / "sensor_simulator.py"
+    subprocess.Popen(["python", str(script), str(cfg)])
+    return jsonify({"status": "started", "mapping": mapping})
 
 
 @app.route("/tde")

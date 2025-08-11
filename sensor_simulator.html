@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Sensor Simulator</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+  <header class="bg-dark text-white text-center py-3 mb-4">
+    <h1>AgriCrypt-Chain Farm Dashboard</h1>
+  </header>
+  <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4">
+    <div class="container-fluid">
+      <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+        <li class="nav-item"><a class="nav-link" href="/">Home</a></li>
+        <li class="nav-item"><a class="nav-link" href="/connect">Sensor Connection</a></li>
+        <li class="nav-item"><a class="nav-link active" href="/simulate-ui">Simulator</a></li>
+      </ul>
+    </div>
+  </nav>
+  <div class="container py-4">
+    <h1 class="mb-3">Test Sensor Simulator</h1>
+    <p class="mb-3">Configure virtual nodes and generate synthetic readings to test the system.</p>
+    <button class="btn btn-primary" onclick="startSim()">Start Simulation</button>
+    <pre id="mapping" class="bg-white border mt-3 p-3"></pre>
+  </div>
+  <script>
+  async function startSim(){
+    const nodeCount = parseInt(prompt('How many nodes?', '1'));
+    if(isNaN(nodeCount) || nodeCount < 1){ return; }
+    let nodes = [];
+    for(let i=0;i<nodeCount;i++){
+      const sensors = prompt(`Enter sensors for node ${i+1} (comma separated)`, 'dht22,soil,ph,light,water');
+      const sensorList = sensors ? sensors.split(',').map(s => s.trim()).filter(s => s) : [];
+      nodes.push({id:`node${i+1}`, sensors:sensorList});
+    }
+    const res = await fetch('/simulate', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({nodes})
+    });
+    const data = await res.json();
+    document.getElementById('mapping').textContent = JSON.stringify(data.mapping, null, 2);
+  }
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
