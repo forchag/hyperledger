@@ -1,3 +1,14 @@
+"""Flask interface for the Hyperledger agricultural demo.
+
+This application previously depended on a ``MockBlockchain`` class from the
+``nft_traceability`` module. The traceability utilities were later refactored
+to expose a real in-memory ledger named :class:`TraceabilityLedger`, and the
+mock class was removed. Importing the old name caused ``ImportError`` during
+application start-up. The import and the instantiation below are updated to
+use ``TraceabilityLedger`` so the application aligns with the current
+traceability implementation.
+"""
+
 from flask import Flask, request, jsonify, render_template_string, make_response
 import json
 import base64
@@ -36,7 +47,7 @@ from hlf_client import (
 
 import threading
 from incident_responder import watch as incident_watch
-from nft_traceability import AgriNFT, MockBlockchain, verify_product
+from nft_traceability import AgriNFT, TraceabilityLedger, verify_product
 from sensor_simulator import build_mapping
 
 app = Flask(__name__)
@@ -48,8 +59,18 @@ BLOCKCHAIN_STARTED = False
 ACCESS_LOG = []
 
 
-TRACE_CHAIN = MockBlockchain()
-TRACE_CHAIN.add_nft(AgriNFT(token_id=1, produce_type="Tomato", harvest_date=20250730, zone_ids=[12, 18], merkle_roots=["0x3a7f...", "0x8c2d..."], quality_score=98, storage_conditions="4-8C"))
+TRACE_CHAIN = TraceabilityLedger()
+TRACE_CHAIN.add_nft(
+    AgriNFT(
+        token_id=1,
+        produce_type="Tomato",
+        harvest_date=20250730,
+        zone_ids=[12, 18],
+        merkle_roots=["0x3a7f...", "0x8c2d..."],
+        quality_score=98,
+        storage_conditions="4-8C",
+    )
+)
 
 @app.before_request
 def log_access():
