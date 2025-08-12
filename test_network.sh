@@ -3,6 +3,16 @@
 # sensor chaincode. Run from the repository root on a Raspberry Pi.
 set -e
 
+# Fabric sample scripts make liberal use of `pushd`/`popd` without
+# quoting paths, which causes them to break if the repository resides in
+# a directory containing spaces. Detect this early and provide a clear
+# error message instead of allowing confusing failures later on.
+if [[ "$PWD" =~ [[:space:]] ]]; then
+    echo "Error: repository path contains spaces. Move the project to a"
+    echo "directory with no spaces and re-run this script."
+    exit 1
+fi
+
 # Download Fabric samples if not already present
 if [ ! -d fabric-samples/test-network ]; then
     echo "Downloading Hyperledger Fabric samples..."
