@@ -3,6 +3,7 @@
 from datetime import datetime
 import base64
 import json
+import zlib
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives import serialization
@@ -42,8 +43,19 @@ def log_block_event(message):
 
 
 def encrypt_payload(data: dict) -> str:
-    """Encrypt a JSON payload using the RSA public key."""
-    plaintext = json.dumps(data).encode("utf-8")
+    """Encrypt a JSON payload using the RSA public key.
+
+    RSA can only encrypt messages up to a limited size.  We first compress
+    the JSON payload with zlib to ensure typical sensor readings fit within
+    the RSA block size.  The compressed ciphertext is then RSA encrypted and
+    base64 encoded for transport.
+    """
+
+    plaintext = zlib.compress(json.dumps(data).encode("utf-8"))
+    max_len = PUBLIC_KEY.key_size // 8 - 2 * hashes.SHA256().digest_size - 2
+    if len(plaintext) > max_len:
+        raise ValueError("Payload too large to encrypt")
+
     ciphertext = PUBLIC_KEY.encrypt(
         plaintext,
         padding.OAEP(
@@ -67,7 +79,8 @@ def decrypt_payload(enc: str) -> dict:
                 label=None,
             ),
         )
-        return json.loads(plaintext.decode("utf-8"))
+        decompressed = zlib.decompress(plaintext)
+        return json.loads(decompressed.decode("utf-8"))
     except Exception:
         return {}
 
