@@ -42,6 +42,14 @@
     const data = await res.json();
     document.getElementById('mapping').textContent = JSON.stringify(data.mapping, null, 2);
   }
+  async function loadMapping(){
+    const res = await fetch('/simulation-state');
+    const data = await res.json();
+    if(data.mapping){
+      document.getElementById('mapping').textContent = JSON.stringify(data.mapping, null, 2);
+    }
+  }
+  window.onload = loadMapping;
   </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/js/bootstrap.bundle.min.js"></script>
 </body>
