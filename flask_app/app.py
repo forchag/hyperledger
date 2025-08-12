@@ -400,6 +400,22 @@ def check_and_start_blockchain():
 
 @app.route("/discover")
 def discover():
+    """Return a list of active nodes for the dashboard.
+
+    In the original demo this endpoint attempted to ping a predefined list of
+    Raspberry Pi addresses. That approach fails in the simulated environment
+    where sensor data is submitted via HTTP rather than individual networked
+    devices. We first consult the in-memory registry populated through the
+    ``/register`` endpoint. If devices have been registered we treat them as
+    active nodes. Otherwise we fall back to probing the hard-coded addresses for
+    compatibility with the previous behaviour.
+    """
+
+    devices = list_devices()
+    if devices:
+        nodes = [{"ip": dev, "sensors": {}} for dev in devices]
+        return jsonify({"count": len(nodes), "nodes": nodes})
+
     active = [ip for ip in NODE_ADDRESSES if ping_node(ip)]
     nodes = [{"ip": ip, "sensors": NODE_SENSORS.get(ip, {})} for ip in active]
     return jsonify({"count": len(active), "nodes": nodes})
