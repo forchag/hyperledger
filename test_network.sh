@@ -107,7 +107,9 @@ ensure_go() {
 
   # make module cache writeable (prevents future permission hiccups)
   go env -w GOMODCACHE="${HOME}/go/pkg/mod"
-  go env -w GOTOOLCHAIN=local || true   # avoid auto-download surprises
+  if go env GOTOOLCHAIN >/dev/null 2>&1; then
+    go env -w GOTOOLCHAIN=local
+  fi                                   # avoid auto-download surprises
   export GOFLAGS=-modcacherw
 }
 
