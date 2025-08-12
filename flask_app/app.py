@@ -188,15 +188,21 @@ def index():
                 ).join('');
                 document.getElementById('block-body').innerHTML = rows;
             }
+            function formatChainResponse(data){
+                let msg = data.started ? 'Blockchain started' : 'Blockchain not running';
+                if(!data.started && data.error){ msg += ': ' + data.error; }
+                const checks = data.checks.map(c => (c.ok ? '[\u2713] ' : '[x] ') + c.check).join('\n');
+                return msg + '\n' + checks;
+            }
             async function startChain(){
                 const res = await fetch('/start-blockchain', {method:'POST'});
                 const data = await res.json();
-                document.getElementById('chain-result').textContent = data.checks.map(c => (c.ok ? '[\u2713] ' : '[x] ') + c.check).join('\n');
+                document.getElementById('chain-result').textContent = formatChainResponse(data);
             }
             async function restartChain(){
                 const res = await fetch('/restart-blockchain', {method:'POST'});
                 const data = await res.json();
-                document.getElementById('chain-result').textContent = data.checks.map(c => (c.ok ? '[\u2713] ' : '[x] ') + c.check).join('\n');
+                document.getElementById('chain-result').textContent = formatChainResponse(data);
             }
             function startPolling() {
                 loadReadings();
@@ -317,14 +323,14 @@ def block_events():
 
 @app.route("/start-blockchain", methods=["POST"])
 def start_blockchain_route():
-    checks, started = start_blockchain()
-    return jsonify({"started": started, "checks": checks})
+    checks, started, error = start_blockchain()
+    return jsonify({"started": started, "checks": checks, "error": error})
 
 
 @app.route("/restart-blockchain", methods=["POST"])
 def restart_blockchain_route():
-    checks, started = restart_blockchain()
-    return jsonify({"started": started, "checks": checks})
+    checks, started, error = restart_blockchain()
+    return jsonify({"started": started, "checks": checks, "error": error})
 
 
 def ping_node(ip: str) -> bool:
@@ -364,18 +370,18 @@ def start_blockchain():
     global BLOCKCHAIN_STARTED
     checks = run_system_checks()
     if not all(c["ok"] for c in checks):
-        return checks, False
+        return checks, False, "System checks failed"
     if BLOCKCHAIN_STARTED:
-        return checks, True
+        return checks, True, None
     try:
         script = Path(__file__).resolve().parent.parent / "test_network.sh"
         subprocess.Popen(["bash", str(script)])
         BLOCKCHAIN_STARTED = True
         print("Blockchain network start initiated")
-        return checks, True
+        return checks, True, None
     except Exception as e:
         print("Failed to start blockchain:", e)
-        return checks, False
+        return checks, False, str(e)
 
 
 def restart_blockchain():
@@ -574,6 +580,20 @@ def start_simulation():
     # to avoid FileNotFoundError on systems where only ``python3`` is installed.
     subprocess.Popen([sys.executable, str(script), str(cfg)])
     return jsonify({"status": "started", "mapping": mapping})
+
+
+@app.route("/simulation-state")
+def simulation_state():
+    """Return the current simulator mapping if available."""
+    root = Path(__file__).resolve().parent.parent
+    cfg = root / "simulator_config.json"
+    if not cfg.exists():
+        return jsonify({"mapping": None})
+    try:
+        config = json.loads(cfg.read_text())
+    except Exception:
+        return jsonify({"mapping": None})
+    return jsonify({"mapping": build_mapping(config)})
 
 
 @app.route("/tde")
