@@ -570,7 +570,9 @@ def start_simulation():
     cfg.write_text(json.dumps(config))
     mapping = build_mapping(config)
     script = root / "sensor_simulator.py"
-    subprocess.Popen(["python", str(script), str(cfg)])
+    # Use the current Python executable instead of a hard-coded "python" string
+    # to avoid FileNotFoundError on systems where only ``python3`` is installed.
+    subprocess.Popen([sys.executable, str(script), str(cfg)])
     return jsonify({"status": "started", "mapping": mapping})
 
 
