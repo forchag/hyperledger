@@ -6,6 +6,12 @@ import subprocess
 import hashlib
 from pathlib import Path
 import io
+import sys
+
+# Ensure the project root is on the module search path so local modules
+# such as ``incident_responder`` can be imported when running this file
+# directly.
+sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 # Placeholder for Hyperledger Fabric client imports
 import hlf_client
