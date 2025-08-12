@@ -1,11 +1,7 @@
 #!/usr/bin/env bash
 # Launch Hyperledger Fabric test network and deploy chaincode(s) from THIS repo.
-# Run from the repository root (no sudo). Works with Docker (snap or apt).
+# Run from the repository root (NO sudo). Works with Docker (snap or apt).
 set -Eeuo pipefail
-
-###############
-# Nice errors #
-###############
 trap 'echo "❌ Error on line $LINENO. Exiting."; exit 1' ERR
 
 ########################
@@ -15,50 +11,110 @@ if [[ "${PWD}" =~ [[:space:]] ]]; then
   echo "Error: repository path contains spaces. Move the project to a directory with no spaces."
   exit 1
 fi
-
 if [[ "${EUID}" -eq 0 ]]; then
-  echo "Error: do NOT run this script with sudo. It creates root-owned files and breaks Go packaging."
+  echo "Error: do NOT run this script with sudo."
   exit 1
 fi
-
 command -v docker >/dev/null 2>&1 || { echo "Error: docker not found in PATH."; exit 1; }
-command -v go >/dev/null 2>&1 || { echo "Error: Go not installed (need Go 1.20+)."; exit 1; }
 
 ########################
 # Docker connectivity  #
 ########################
-# Prefer the standard socket; if DOCKER_HOST points to a dead snap socket, unset it.
 if ! docker info >/dev/null 2>&1; then
   if [[ "${DOCKER_HOST:-}" != "" ]]; then
     echo "⚠️  docker not reachable via DOCKER_HOST=${DOCKER_HOST}. Trying default socket…"
     unset DOCKER_HOST || true
   fi
 fi
-
-# Final check
 docker info >/dev/null 2>&1 || { echo "Error: cannot talk to Docker. Is the daemon running?"; exit 1; }
 
 ########################################
-# Resolve absolute paths & chaincodes  #
+# Paths                                 #
 ########################################
 REPO_ROOT="$(realpath "$(dirname "$0")")"
 TEST_NET_DIR="${REPO_ROOT}/fabric-samples/test-network"
-
-CC_SENSOR="${REPO_ROOT}/chaincode/sensor"   # Go chaincode path (absolute)
-CC_AGRI="${REPO_ROOT}/chaincode/agri"       # Optional second chaincode
-
+CC_SENSOR="${REPO_ROOT}/chaincode/sensor"         # Go chaincode path (absolute)
+CC_AGRI="${REPO_ROOT}/chaincode/agri"             # optional
 [[ -d "${CC_SENSOR}" ]] || { echo "Error: ${CC_SENSOR} does not exist."; exit 1; }
 
 ########################################
-# Align Fabric image versions (optional
-# but recommended; matches local 2.5)  #
+# Fabric image tags (match 2.5/1.5)     #
 ########################################
-# You can override these before running the script if you want different tags.
 export IMAGE_TAG="${IMAGE_TAG:-2.5}"
 export CA_IMAGE_TAG="${CA_IMAGE_TAG:-1.5}"
 
 ########################################
-# Get fabric-samples if missing        #
+# Helper: compare Go versions           #
+########################################
+ver_ge() { # ver_ge 1.20 1.18 -> true
+  # simple semver (major.minor[.patch]) compare
+  local IFS=.
+  local -a A=($1) B=($2)
+  for ((i=${#A[@]}; i<3; i++)); do A[i]=0; done
+  for ((i=${#B[@]}; i<3; i++)); do B[i]=0; done
+  (( A[0]>B[0] )) || { (( A[0]<B[0] )) && return 1; }
+  (( A[0]==B[0] )) && { (( A[1]>B[1] )) || { (( A[1]<B[1] )) && return 1; }
+    (( A[1]==B[1] )) && { (( A[2]>=B[2] )) || return 1; }; }
+  return 0
+}
+
+########################################
+# Auto-install/upgrade Go if needed     #
+########################################
+ensure_go() {
+  # find highest required go version from chaincodes' go.mod
+  local need="1.20" v
+  for dir in "${CC_SENSOR}" "${CC_AGRI}"; do
+    [[ -d "$dir" && -f "$dir/go.mod" ]] || continue
+    v="$(grep -Eo '^go[[:space:]]+[0-9]+\.[0-9]+' "$dir/go.mod" | awk '{print $2}' | head -n1 || true)"
+    [[ -n "$v" ]] && ver_ge "$v" "$need" && need="$v"
+  done
+
+  # detect current go version (if any)
+  local have=""
+  if command -v go >/dev/null 2>&1; then
+    have="$(go version | awk '{print $3}' | sed 's/^go//')"
+  fi
+
+  if [[ -z "$have" || ! $(ver_ge "$have" "$need"; echo $?) -eq 0 ]]; then
+    echo "🔧 Go toolchain upgrade: need >= ${need}${have:+, found $have}"
+    # install locally (no sudo) under ~/.local/go and put it on PATH for this session
+    local GO_VER="${GO_VER_OVERRIDE:-$need}"
+    # use an official recent patch for the needed minor (e.g., 1.20 -> 1.20.14). Default to latest known if not provided.
+    case "$GO_VER" in
+      1.20) GO_VER="1.20.14" ;;
+      1.21) GO_VER="1.21.13" ;;
+      1.22) GO_VER="1.22.5" ;;
+      1.23) GO_VER="1.23.0" ;;  # adjust as needed
+      *)    GO_VER="$GO_VER" ;;
+    esac
+    local ARCH="linux-amd64" # your machine is x86_64; change if needed
+    local TARBALL="go${GO_VER}.${ARCH}.tar.gz"
+    local DEST="${HOME}/.local"
+    mkdir -p "${DEST}"
+    echo "⬇️  Downloading Go ${GO_VER}…"
+    curl -fsSL "https://go.dev/dl/${TARBALL}" -o "/tmp/${TARBALL}"
+    echo "📦 Installing to ${DEST}/go …"
+    rm -rf "${DEST}/go"
+    tar -C "${DEST}" -xzf "/tmp/${TARBALL}"
+    export PATH="${DEST}/go/bin:${PATH}"
+    hash -r
+    go version || { echo "Error: Go install failed."; exit 1; }
+    echo "✅ Using $(go version)"
+  else
+    echo "✅ Go $(go version | awk '{print $3}') satisfies requirement (>= ${need})"
+  fi
+
+  # make module cache writeable (prevents future permission hiccups)
+  go env -w GOMODCACHE="${HOME}/go/pkg/mod"
+  go env -w GOTOOLCHAIN=local || true   # avoid auto-download surprises
+  export GOFLAGS=-modcacherw
+}
+
+ensure_go
+
+########################################
+# Get fabric-samples if missing         #
 ########################################
 if [[ ! -d "${TEST_NET_DIR}" ]]; then
   echo "📦 fabric-samples/test-network not found — fetching samples…"
@@ -72,13 +128,11 @@ if [[ ! -d "${TEST_NET_DIR}" ]]; then
 fi
 
 ########################################
-# Vendor Go deps for deterministic pkg #
+# Vendor Go deps                        #
 ########################################
 echo "🔧 Vendoring Go dependencies for sensor chaincode…"
 pushd "${CC_SENSOR}" >/dev/null
 go mod tidy
-# Make module cache group-writable to avoid future permission issues
-export GOFLAGS=-modcacherw
 go mod vendor
 popd >/dev/null
 
@@ -86,43 +140,27 @@ if [[ -d "${CC_AGRI}" ]]; then
   echo "🔧 Vendoring Go dependencies for agri chaincode…"
   pushd "${CC_AGRI}" >/dev/null
   go mod tidy
-  export GOFLAGS=-modcacherw
   go mod vendor
   popd >/dev/null
 fi
 
 ########################################
-# Bring network down cleanly           #
+# Bring network down/up & deploy        #
 ########################################
 pushd "${TEST_NET_DIR}" >/dev/null
 echo "🧹 Bringing any existing test network down…"
 ./network.sh down
 
-########################################
-# Bring network up + create channel    #
-########################################
 echo "🚀 Bringing network up with CAs and creating channel…"
 ./network.sh up createChannel -ca
 
-########################################
-# Deploy chaincode(s) with ABS paths   #
-########################################
 echo "📦 Deploying sensor chaincode from: ${CC_SENSOR}"
-./network.sh deployCC \
-  -c mychannel \
-  -ccn sensor \
-  -ccl go \
-  -ccp "${CC_SENSOR}"
+./network.sh deployCC -c mychannel -ccn sensor -ccl go -ccp "${CC_SENSOR}"
 
 if [[ -d "${CC_AGRI}" ]]; then
   echo "📦 Deploying agri chaincode from: ${CC_AGRI}"
-  ./network.sh deployCC \
-    -c mychannel \
-    -ccn agri \
-    -ccl go \
-    -ccp "${CC_AGRI}"
+  ./network.sh deployCC -c mychannel -ccn agri -ccl go -ccp "${CC_AGRI}"
 fi
 
-echo "✅ All done. Peers and orderer are up, channel 'mychannel' created, chaincode(s) deployed."
+echo "✅ All done. Channel 'mychannel' created, chaincode(s) deployed."
 popd >/dev/null
-
