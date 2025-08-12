@@ -6,14 +6,39 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from flask_app.hlf_client import record_sensor_data, register_device
+import os
+from urllib.parse import urljoin
+
+import requests
+
+# Base URL of the running Flask application. Defaults to the local
+# development server but can be overridden via the ``SIMULATOR_URL``
+# environment variable so the simulator can target remote instances.
+BASE_URL = os.environ.get("SIMULATOR_URL", "https://localhost:8443")
 
 GPIO_PINS = [4, 17, 27, 22, 5, 6, 13, 19, 26, 18, 23, 24, 25, 12, 16, 20, 21]
 
 
 def _simulate_sensor(sensor_id: str, node_id: str, gpio_pin: int) -> None:
     """Send periodic fake readings for a single sensor."""
-    register_device(sensor_id, node_id)
+
+    register_url = urljoin(BASE_URL, "/register")
+    sensor_url = urljoin(BASE_URL, "/sensor")
+
+    # Register the device with the Flask backend so it appears in the
+    # dashboard immediately. Failures are logged but do not stop the
+    # simulation loop so that transient connectivity issues don't kill
+    # the simulator.
+    try:
+        requests.post(
+            register_url,
+            json={"id": sensor_id, "owner": node_id},
+            timeout=5,
+            verify=False,
+        )
+    except Exception as exc:
+        print(f"register_device failed for {sensor_id}: {exc}")
+
     while True:
         temperature = round(random.uniform(10, 35), 2)
         humidity = round(random.uniform(30, 90), 2)
@@ -22,17 +47,24 @@ def _simulate_sensor(sensor_id: str, node_id: str, gpio_pin: int) -> None:
         light = round(random.uniform(200, 800), 2)
         water_level = round(random.uniform(0, 100), 2)
         ts = datetime.utcnow().isoformat()
-        record_sensor_data(
-            sensor_id,
-            temperature,
-            humidity,
-            soil_moisture,
-            ph,
-            light,
-            water_level,
-            ts,
-            {"gpio": gpio_pin, "simulated": True},
-        )
+        payload = {
+            "id": sensor_id,
+            "temperature": temperature,
+            "humidity": humidity,
+            "soil_moisture": soil_moisture,
+            "ph": ph,
+            "light": light,
+            "water_level": water_level,
+            "timestamp": ts,
+            "gpio": gpio_pin,
+            "simulated": True,
+        }
+
+        try:
+            requests.post(sensor_url, json=payload, timeout=5, verify=False)
+        except Exception as exc:
+            print(f"record_sensor_data failed for {sensor_id}: {exc}")
+
         print(
             f"{sensor_id} GPIO{gpio_pin} -> T:{temperature} H:{humidity} "
             f"Soil:{soil_moisture} pH:{ph} Light:{light} Water:{water_level}"
