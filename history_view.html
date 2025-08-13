@@ -51,42 +51,64 @@
         dataBySensor[id] = d.records;
       }
 
-      const ignore = ['id','timestamp','payload'];
-      const fields = new Set();
-      for(const records of Object.values(dataBySensor)){
-        if(records.length){
-          Object.keys(records[0]).forEach(k => { if(!ignore.includes(k)) fields.add(k); });
-        }
-      }
-
+      const SENSOR_CONFIG = {
+        dht22: { label: 'DHT22', fields: ['temperature', 'humidity'] },
+        soil: { label: 'Soil Moisture', fields: ['soil_moisture'] },
+        ph: { label: 'pH', fields: ['ph'] },
+        light: { label: 'Light', fields: ['light'] },
+        water: { label: 'Water Level', fields: ['water_level'] }
+      };
+      const FIELD_LABELS = {
+        temperature: 'Temperature',
+        humidity: 'Humidity',
+        soil_moisture: 'Soil Moisture',
+        ph: 'pH',
+        light: 'Light',
+        water_level: 'Water Level'
+      };
       const colors = ['red','blue','green','orange','purple','brown','cyan'];
       const container = document.getElementById('charts');
 
-      for(const field of fields){
-        const heading = document.createElement('h3');
-        heading.textContent = field.replace('_',' ');
-        container.appendChild(heading);
-        const canvas = document.createElement('canvas');
-        canvas.height = 100;
-        container.appendChild(canvas);
+      const sensorsByType = {};
+      for(const id of sensors){
+        const type = id.split('_').pop();
+        sensorsByType[type] = sensorsByType[type] || [];
+        sensorsByType[type].push(id);
+      }
 
-        const allLabels = Array.from(new Set(
-          Object.values(dataBySensor).flatMap(rec => rec.map(r => r.timestamp))
-        )).sort();
+      for(const [type, ids] of Object.entries(sensorsByType)){
+        const cfg = SENSOR_CONFIG[type];
+        if(!cfg) continue;
+        const sectionHeading = document.createElement('h2');
+        sectionHeading.textContent = cfg.label;
+        container.appendChild(sectionHeading);
 
-        const datasets = sensors.map((id, idx) => {
-          const map = {};
-          dataBySensor[id].forEach(r => map[r.timestamp] = r[field]);
-          const data = allLabels.map(ts => map[ts] ?? null);
-          return {
-            label: id,
-            data: data,
-            borderColor: colors[idx % colors.length],
-            fill: false
-          };
-        });
+        for(const field of cfg.fields){
+          const heading = document.createElement('h3');
+          heading.textContent = FIELD_LABELS[field] || field;
+          container.appendChild(heading);
+          const canvas = document.createElement('canvas');
+          canvas.height = 100;
+          container.appendChild(canvas);
 
-        new Chart(canvas, { type: 'line', data: { labels: allLabels, datasets }});
+          const allLabels = Array.from(new Set(
+            ids.flatMap(id => dataBySensor[id].map(r => r.timestamp))
+          )).sort();
+
+          const datasets = ids.map((id, idx) => {
+            const map = {};
+            dataBySensor[id].forEach(r => map[r.timestamp] = r[field]);
+            const data = allLabels.map(ts => map[ts] ?? null);
+            return {
+              label: id,
+              data: data,
+              borderColor: colors[idx % colors.length],
+              fill: false
+            };
+          });
+
+          new Chart(canvas, { type: 'line', data: { labels: allLabels, datasets }});
+        }
       }
     }
     window.onload = init;
