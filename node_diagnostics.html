@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Node Diagnostics</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+  <header class="bg-dark text-white text-center py-3 mb-4">
+    <h1>AgriCrypt-Chain Farm Dashboard</h1>
+  </header>
+  <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4">
+    <div class="container-fluid">
+      <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+        <li class="nav-item"><a class="nav-link" href="/integrity">Data Integrity</a></li>
+        <li class="nav-item"><a class="nav-link" href="/connect">Sensor Connection</a></li>
+        <li class="nav-item"><a class="nav-link" href="/simulate-ui">Sensor Simulator</a></li>
+        <li class="nav-item"><a class="nav-link" href="/status">Network Status</a></li>
+        <li class="nav-item"><a class="nav-link" href="/tde">Threat Detection</a></li>
+        <li class="nav-item"><a class="nav-link" href="/history">Sensor History</a></li>
+        <li class="nav-item"><a class="nav-link" href="/explorer">Blockchain Explorer</a></li>
+        <li class="nav-item"><a class="nav-link" href="/devices">Device Management</a></li>
+        <li class="nav-item"><a class="nav-link" href="/storage">Storage Monitor</a></li>
+        <li class="nav-item"><a class="nav-link" href="/recovery">Recovery</a></li>
+        <li class="nav-item"><a class="nav-link" href="/access-log">Access Log</a></li>
+        <li class="nav-item"><a class="nav-link active" aria-current="page" href="/diagnostics">Node Diagnostics</a></li>
+      </ul>
+    </div>
+  </nav>
+  <div class="container py-4">
+    <h1 class="mb-3">Node Diagnostics</h1>
+    <p>Enter node endpoints (e.g., http://ip:port) one per line and click "Run Diagnostics" to test reachability.</p>
+    <div class="mb-3">
+      <textarea class="form-control" id="endpoints" rows="5" placeholder="http://192.168.0.1:8080\nhttp://192.168.0.2:8080"></textarea>
+    </div>
+    <button class="btn btn-primary" onclick="runDiagnostics()">Run Diagnostics</button>
+    <table class="table mt-4" id="results-table">
+      <thead>
+        <tr><th>Endpoint</th><th>Status</th></tr>
+      </thead>
+      <tbody id="results"></tbody>
+    </table>
+  </div>
+  <script>
+    async function runDiagnostics(){
+      const area = document.getElementById('endpoints');
+      const endpoints = area.value.split(/\n|,|;+/).map(e => e.trim()).filter(Boolean);
+      const tbody = document.getElementById('results');
+      tbody.innerHTML = '';
+      for(const ep of endpoints){
+        let status = 'unreachable';
+        try {
+          await fetch(ep, {method: 'HEAD', mode: 'no-cors'});
+          status = 'reachable';
+        } catch(err){
+          status = 'unreachable';
+        }
+        const row = document.createElement('tr');
+        row.innerHTML = `<td>${ep}</td><td>${status}</td>`;
+        tbody.appendChild(row);
+      }
+    }
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

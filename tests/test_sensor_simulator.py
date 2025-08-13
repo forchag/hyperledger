@@ -24,8 +24,8 @@ def test_build_mapping_basic_multiple_nodes():
     }
     mapping = build_mapping(config)
     assert mapping == {
-        "node1": {"temp": GPIO_PINS[0], "humidity": GPIO_PINS[1]},
-        "node2": {"ph": GPIO_PINS[0]},
+        "node1": {"ip": "node1", "sensors": {"temp": GPIO_PINS[0], "humidity": GPIO_PINS[1]}},
+        "node2": {"ip": "node2", "sensors": {"ph": GPIO_PINS[0]}},
     }
 
 
@@ -34,9 +34,10 @@ def test_build_mapping_pin_wraps_when_exhausted():
     sensors = [f"s{i}" for i in range(sensor_count)]
     config = {"nodes": [{"id": "node1", "sensors": sensors}]}
     mapping = build_mapping(config)
-    assert mapping["node1"][f"s{len(GPIO_PINS)}"] == GPIO_PINS[0]
-    assert mapping["node1"][f"s{len(GPIO_PINS)+1}"] == GPIO_PINS[1]
-    assert mapping["node1"][f"s{len(GPIO_PINS)+2}"] == GPIO_PINS[2]
+    sensors_map = mapping["node1"]["sensors"]
+    assert sensors_map[f"s{len(GPIO_PINS)}"] == GPIO_PINS[0]
+    assert sensors_map[f"s{len(GPIO_PINS)+1}"] == GPIO_PINS[1]
+    assert sensors_map[f"s{len(GPIO_PINS)+2}"] == GPIO_PINS[2]
 
 
 def test_build_mapping_resets_for_each_node():
@@ -47,10 +48,10 @@ def test_build_mapping_resets_for_each_node():
         ]
     }
     mapping = build_mapping(config)
-    assert mapping["node1"]["s1"] == GPIO_PINS[0]
-    assert mapping["node1"]["s2"] == GPIO_PINS[1]
-    assert mapping["node2"]["s3"] == GPIO_PINS[0]
-    assert mapping["node2"]["s4"] == GPIO_PINS[1]
+    assert mapping["node1"]["sensors"]["s1"] == GPIO_PINS[0]
+    assert mapping["node1"]["sensors"]["s2"] == GPIO_PINS[1]
+    assert mapping["node2"]["sensors"]["s3"] == GPIO_PINS[0]
+    assert mapping["node2"]["sensors"]["s4"] == GPIO_PINS[1]
 
 
 def test_build_mapping_handles_empty_sensor_lists():
@@ -61,5 +62,5 @@ def test_build_mapping_handles_empty_sensor_lists():
         ]
     }
     mapping = build_mapping(config)
-    assert mapping["node1"] == {}
-    assert mapping["node2"]["only"] == GPIO_PINS[0]
+    assert mapping["node1"]["sensors"] == {}
+    assert mapping["node2"]["sensors"]["only"] == GPIO_PINS[0]

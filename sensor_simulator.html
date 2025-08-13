@@ -22,6 +22,7 @@
     <h1 class="mb-3">Test Sensor Simulator</h1>
     <p class="mb-3">Configure virtual nodes and generate synthetic readings to test the system.</p>
     <button class="btn btn-primary" onclick="startSim()">Start Simulation</button>
+    <ul id="endpoints" class="mt-3"></ul>
     <pre id="mapping" class="bg-white border mt-3 p-3"></pre>
   </div>
   <script>
@@ -30,9 +31,10 @@
     if(isNaN(nodeCount) || nodeCount < 1){ return; }
     let nodes = [];
     for(let i=0;i<nodeCount;i++){
+      const ip = prompt(`Enter IP for node ${i+1}`, '192.168.0.100');
       const sensors = prompt(`Enter sensors for node ${i+1} (comma separated)`, 'dht22,soil,ph,light,water');
       const sensorList = sensors ? sensors.split(',').map(s => s.trim()).filter(s => s) : [];
-      nodes.push({id:`node${i+1}`, sensors:sensorList});
+      nodes.push({id:`node${i+1}`, ip, sensors:sensorList});
     }
     const res = await fetch('/simulate', {
       method:'POST',
@@ -41,13 +43,19 @@
     });
     const data = await res.json();
     document.getElementById('mapping').textContent = JSON.stringify(data.mapping, null, 2);
+    displayEndpoints(data.mapping);
   }
   async function loadMapping(){
     const res = await fetch('/simulation-state');
     const data = await res.json();
     if(data.mapping){
       document.getElementById('mapping').textContent = JSON.stringify(data.mapping, null, 2);
+      displayEndpoints(data.mapping);
     }
+  }
+  function displayEndpoints(mapping){
+    const list = Object.entries(mapping).map(([node, info]) => `<li>${node}: ${info.ip}</li>`).join('');
+    document.getElementById('endpoints').innerHTML = list;
   }
   window.onload = loadMapping;
   </script>

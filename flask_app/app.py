@@ -254,6 +254,7 @@ def index():
                     <li class='nav-item'><a class='nav-link' href='/devices'>Device Management</a></li>
                     <li class='nav-item'><a class='nav-link' href='/storage'>Storage Monitor</a></li>
                     <li class='nav-item'><a class='nav-link' href='/recovery'>Recovery</a></li>
+                    <li class='nav-item'><a class='nav-link' href='/diagnostics'>Node Diagnostics</a></li>
                     <li class='nav-item'><a class='nav-link' href='/access-log'>Access Log</a></li>
                 </ul>
             </div>
@@ -812,6 +813,12 @@ def verify_product_route(nft_id):
     except KeyError:
         return jsonify({"error": "NFT not found"}), 404
     return jsonify({"nft_id": nft_id, "result": result})
+
+
+@app.route("/diagnostics")
+def diagnostics_page():
+    template = Path(__file__).resolve().parent.parent / "node_diagnostics.html"
+    return render_template_string(template.read_text())
 
 
 @app.route("/access-log")
