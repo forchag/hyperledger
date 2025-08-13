@@ -722,12 +722,18 @@ def history_page():
 
 @app.route("/history-data")
 def history_data():
+    """Return history for a sensor plus the full list of available sensors.
+
+    The list combines registered devices and any sensors that have submitted
+    data, ensuring test and simulated sensors are exposed in the UI.
+    """
     sensor_id = request.args.get("sensor_id")
+    # Include sensors with recorded data even if never formally registered
+    all_ids = sorted(set(list_devices()) | set(hlf_client.SENSOR_DATA.keys()))
     if not sensor_id:
-        ids = list_devices()
-        sensor_id = ids[0] if ids else None
+        sensor_id = all_ids[0] if all_ids else None
     records = get_sensor_history(sensor_id) if sensor_id else []
-    return jsonify(records)
+    return jsonify({"sensors": all_ids, "records": records})
 
 
 @app.route("/explorer")
