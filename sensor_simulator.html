@@ -54,7 +54,11 @@
     }
   }
   function displayEndpoints(mapping){
-    const list = Object.entries(mapping).map(([node, info]) => `<li>${node}: ${info.ip}</li>`).join('');
+    const list = Object.entries(mapping).map(([node, info]) => {
+      const ip = info.ip || 'N/A';
+      const sensors = info.sensors ? Object.keys(info.sensors).join(', ') : '';
+      return `<li>${node}: ${ip}${sensors ? ' (' + sensors + ')' : ''}</li>`;
+    }).join('');
     document.getElementById('endpoints').innerHTML = list;
   }
   window.onload = loadMapping;
