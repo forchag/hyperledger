@@ -170,20 +170,25 @@ def index():
             </style>
             <script>
             async function discover() {
-                const res = await fetch('/discover');
-                const raw = await res.json();
-                const nodes = Array.isArray(raw)
-                    ? raw
-                    : Array.isArray(raw.nodes)
-                        ? raw.nodes
-                        : Object.values(raw.nodes || raw);
-                document.getElementById('node-count').innerText = nodes.length;
-                document.getElementById('node-list').innerHTML =
-                    nodes.map(n => {
-                        const ip = n.ip || n;
-                        const sensors = n.sensors ? Object.keys(n.sensors).join(', ') : '';
-                        return `<li>${ip}${sensors ? ' (' + sensors + ')' : ''}</li>`;
-                    }).join('');
+                try {
+                    const port = window.location.port || '8443';
+                    const base = window.location.protocol + '//' + window.location.hostname + ':' + port;
+                    const res = await fetch(base + '/discover');
+                    if (!res.ok) throw new Error('Network response was not ok');
+                    const raw = await res.json();
+                    const nodes = Array.isArray(raw.nodes) ? raw.nodes : Object.values(raw.nodes || {});
+                    document.getElementById('node-count').innerText = raw.count ?? nodes.length;
+                    document.getElementById('node-list').innerHTML =
+                        nodes.map(n => {
+                            const ip = n.ip || n;
+                            const sensors = n.sensors ? Object.keys(n.sensors).join(', ') : '';
+                            return `<li>${ip}${sensors ? ' (' + sensors + ')' : ''}</li>`;
+                        }).join('');
+                } catch (err) {
+                    console.error('Discover failed:', err);
+                    document.getElementById('node-count').innerText = '0';
+                    document.getElementById('node-list').innerHTML = '';
+                }
             }
             async function showMerkle() {
                 const num = document.getElementById('block-num').value;
