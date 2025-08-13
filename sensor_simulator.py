@@ -19,8 +19,13 @@ BASE_URL = os.environ.get("SIMULATOR_URL", "https://localhost:8443")
 GPIO_PINS = [4, 17, 27, 22, 5, 6, 13, 19, 26, 18, 23, 24, 25, 12, 16, 20, 21]
 
 
-def _simulate_sensor(sensor_id: str, node_id: str, gpio_pin: int) -> None:
-    """Send periodic fake readings for a single sensor."""
+def _simulate_sensor(sensor_id: str, node_ip: str, gpio_pin: int) -> None:
+    """Send periodic fake readings for a single sensor.
+
+    ``node_ip`` represents the endpoint of the simulated node.  It is recorded
+    as the device owner so the dashboard can display reachable IP addresses for
+    diagnostics.
+    """
 
     register_url = urljoin(BASE_URL, "/register")
     sensor_url = urljoin(BASE_URL, "/sensor")
@@ -32,7 +37,7 @@ def _simulate_sensor(sensor_id: str, node_id: str, gpio_pin: int) -> None:
     try:
         requests.post(
             register_url,
-            json={"id": sensor_id, "owner": node_id},
+            json={"id": sensor_id, "owner": node_ip},
             timeout=5,
             verify=False,
         )
@@ -73,12 +78,14 @@ def _simulate_sensor(sensor_id: str, node_id: str, gpio_pin: int) -> None:
 
 
 def build_mapping(config: dict) -> dict:
-    """Return mapping of nodes to sensors and GPIO pins.
+    """Return mapping of nodes to sensors, GPIO pins, and IP addresses.
 
     Exposed as a public function so the web application can reuse the same
     logic when presenting GPIO assignments to the user before launching the
-    simulator.
+    simulator.  Each entry has the form ``{id: {"ip": ip, "sensors": {...}}}``
+    to make node endpoints visible for diagnostics.
     """
+
     mapping = {}
     for node in config.get("nodes", []):
         node_id = node.get("id")
@@ -86,7 +93,7 @@ def build_mapping(config: dict) -> dict:
         for idx, sensor in enumerate(node.get("sensors", [])):
             gpio = GPIO_PINS[idx % len(GPIO_PINS)]
             sensors[sensor] = gpio
-        mapping[node_id] = sensors
+        mapping[node_id] = {"ip": node.get("ip", node_id), "sensors": sensors}
     return mapping
 
 
@@ -98,6 +105,7 @@ def main() -> None:
         nodes = int(input("How many nodes? "))
         config = {"nodes": []}
         for i in range(nodes):
+            ip = input(f"Enter IP for node {i + 1}: ").strip()
             sensors = (
                 input(f"Enter sensors for node {i + 1} (comma separated): ")
                 .split(",")
@@ -105,6 +113,7 @@ def main() -> None:
             config["nodes"].append(
                 {
                     "id": f"node{i + 1}",
+                    "ip": ip,
                     "sensors": [s.strip() for s in sensors if s.strip()],
                 }
             )
@@ -113,12 +122,14 @@ def main() -> None:
     print(json.dumps(mapping, indent=2))
 
     threads = []
-    for node_id, sensors in mapping.items():
+    for node_id, info in mapping.items():
+        sensors = info["sensors"]
+        node_ip = info["ip"]
         for sensor_name, gpio_pin in sensors.items():
             sensor_id = f"{node_id}_{sensor_name}"
             t = threading.Thread(
                 target=_simulate_sensor,
-                args=(sensor_id, node_id, gpio_pin),
+                args=(sensor_id, node_ip, gpio_pin),
                 daemon=True,
             )
             t.start()
