@@ -19,6 +19,47 @@ BASE_URL = os.environ.get("SIMULATOR_URL", "https://localhost:8443")
 GPIO_PINS = [4, 17, 27, 22, 5, 6, 13, 19, 26, 18, 23, 24, 25, 12, 16, 20, 21]
 
 
+def _normalize_config(config: dict) -> dict:
+    """Return a normalized copy of ``config`` with sanity checks.
+
+    The simulator previously assumed every node definition contained an ``id``
+    and valid sensor list.  When those fields were omitted the mapping printed
+    entries like ``"node1": undefined``.  This helper guarantees that each
+    node has a unique identifier and IP address and that sensor names are
+    stripped of whitespace.  It prints basic warnings so misconfigurations are
+    visible to the user, but always returns a structure the rest of the module
+    can safely consume.
+    """
+
+    normalized = {"nodes": []}
+    used_ids = set()
+
+    for idx, node in enumerate(config.get("nodes", []), start=1):
+        node_id = node.get("id") or f"node{idx}"
+        if node.get("id") is None:
+            print(f"Node {idx} missing id; auto assigning '{node_id}'")
+
+        base_id = node_id
+        suffix = 1
+        while node_id in used_ids:
+            node_id = f"{base_id}_{suffix}"
+            suffix += 1
+        if node_id != base_id:
+            print(f"Duplicate node id '{base_id}' detected; renamed to '{node_id}'")
+
+        used_ids.add(node_id)
+        ip = node.get("ip") or node_id
+        sensors = [s.strip() for s in (node.get("sensors") or []) if s.strip()]
+        if not sensors:
+            print(f"Node '{node_id}' has no sensors defined")
+
+        normalized["nodes"].append({"id": node_id, "ip": ip, "sensors": sensors})
+
+    if not normalized["nodes"]:
+        raise ValueError("No nodes configured")
+
+    return normalized
+
 def _simulate_sensor(sensor_id: str, node_ip: str, gpio_pin: int) -> None:
     """Send periodic fake readings for a single sensor.
 
@@ -83,12 +124,14 @@ def build_mapping(config: dict) -> dict:
     Exposed as a public function so the web application can reuse the same
     logic when presenting GPIO assignments to the user before launching the
     simulator.  Each entry has the form ``{id: {"ip": ip, "sensors": {...}}}``
-    to make node endpoints visible for diagnostics.
+    to make node endpoints visible for diagnostics.  The input configuration is
+    normalized to avoid ``undefined`` node identifiers.
     """
 
+    config = _normalize_config(config)
     mapping = {}
     for node in config.get("nodes", []):
-        node_id = node.get("id")
+        node_id = node["id"]
         sensors = {}
         for idx, sensor in enumerate(node.get("sensors", [])):
             gpio = GPIO_PINS[idx % len(GPIO_PINS)]
@@ -100,24 +143,29 @@ def build_mapping(config: dict) -> dict:
 def main() -> None:
     if len(sys.argv) > 1:
         cfg_path = Path(sys.argv[1])
-        config = json.loads(cfg_path.read_text())
+        raw_config = json.loads(cfg_path.read_text())
     else:
         nodes = int(input("How many nodes? "))
-        config = {"nodes": []}
+        raw_config = {"nodes": []}
         for i in range(nodes):
             ip = input(f"Enter IP for node {i + 1}: ").strip()
             sensors = (
                 input(f"Enter sensors for node {i + 1} (comma separated): ")
                 .split(",")
             )
-            config["nodes"].append(
+            raw_config["nodes"].append(
                 {
                     "id": f"node{i + 1}",
                     "ip": ip,
                     "sensors": [s.strip() for s in sensors if s.strip()],
                 }
             )
-    mapping = build_mapping(config)
+
+    try:
+        mapping = build_mapping(raw_config)
+    except ValueError as exc:
+        print(f"Configuration error: {exc}")
+        return
     print("GPIO mapping:")
     print(json.dumps(mapping, indent=2))
 
