@@ -174,12 +174,18 @@ def index():
             <script>
             async function discover() {
                 const res = await fetch('/discover');
-                const data = await res.json();
-                document.getElementById('node-count').innerText = data.count;
+                const raw = await res.json();
+                const nodes = Array.isArray(raw)
+                    ? raw
+                    : Array.isArray(raw.nodes)
+                        ? raw.nodes
+                        : Object.values(raw.nodes || raw);
+                document.getElementById('node-count').innerText = nodes.length;
                 document.getElementById('node-list').innerHTML =
-                    data.nodes.map(n => {
-                        const sensors = Object.keys(n.sensors).join(', ');
-                        return `<li>${n.ip} (${sensors})</li>`;
+                    nodes.map(n => {
+                        const ip = n.ip || n;
+                        const sensors = n.sensors ? Object.keys(n.sensors).join(', ') : '';
+                        return `<li>${ip}${sensors ? ' (' + sensors + ')' : ''}</li>`;
                     }).join('');
             }
             async function showMerkle() {
@@ -567,10 +573,19 @@ def status_page():
                 document.getElementById('quarantine-count').innerText = data.quarantined.length;
 
                 const nodeRes = await fetch('/discover');
-                const nodeData = await nodeRes.json();
-                document.getElementById('node-count').innerText = nodeData.count;
+                const rawNodes = await nodeRes.json();
+                const nodes = Array.isArray(rawNodes)
+                    ? rawNodes
+                    : Array.isArray(rawNodes.nodes)
+                        ? rawNodes.nodes
+                        : Object.values(rawNodes.nodes || rawNodes);
+                document.getElementById('node-count').innerText = nodes.length;
                 document.getElementById('node-list').innerHTML =
-                    nodeData.nodes.map(n => `<li>${n.ip}</li>`).join('');
+                    nodes.map(n => {
+                        const ip = n.ip || n;
+                        const sensors = n.sensors ? Object.keys(n.sensors).join(', ') : '';
+                        return `<li>${ip}${sensors ? ' (' + sensors + ')' : ''}</li>`;
+                    }).join('');
             }
             window.onload = load;
             </script>
