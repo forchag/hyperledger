@@ -18,6 +18,26 @@ BASE_URL = os.environ.get("SIMULATOR_URL", "https://localhost:8443")
 
 GPIO_PINS = [4, 17, 27, 22, 5, 6, 13, 19, 26, 18, 23, 24, 25, 12, 16, 20, 21]
 
+# Common sensor set used when none are specified for a node.  Providing a
+# sensible default keeps the simulator resilient to sparse configurations and
+# avoids ``N/A`` values in the web interface.
+DEFAULT_SENSORS = ["dht22", "light", "ph", "soil", "water"]
+
+
+def _random_ip(used: set) -> str:
+    """Return a unique IP in the ``192.168.0.x`` range.
+
+    The simulator auto assigns addresses when none are supplied.  Using a
+    predictable class C network keeps the values realistic while avoiding
+    collisions between nodes.
+    """
+
+    while True:
+        candidate = f"192.168.0.{random.randint(2,254)}"
+        if candidate not in used:
+            used.add(candidate)
+            return candidate
+
 
 def _normalize_config(config: dict) -> dict:
     """Return a normalized copy of ``config`` with sanity checks.
@@ -33,6 +53,8 @@ def _normalize_config(config: dict) -> dict:
 
     normalized = {"nodes": []}
     used_ids = set()
+    used_ips = set()
+    used_ports = set()
 
     for idx, node in enumerate(config.get("nodes", []), start=1):
         node_id = node.get("id") or f"node{idx}"
@@ -48,12 +70,30 @@ def _normalize_config(config: dict) -> dict:
             print(f"Duplicate node id '{base_id}' detected; renamed to '{node_id}'")
 
         used_ids.add(node_id)
-        ip = node.get("ip") or node_id
-        sensors = [s.strip() for s in (node.get("sensors") or []) if s.strip()]
-        if not sensors:
-            print(f"Node '{node_id}' has no sensors defined")
+        ip = node.get("ip")
+        if not ip or ip in used_ips:
+            if ip in used_ips:
+                print(f"Duplicate IP '{ip}' detected; generating unique address")
+            ip = _random_ip(used_ips)
+        else:
+            used_ips.add(ip)
+        port = node.get("port")
+        if port in (None, ""):
+            port = 8000 + idx
+        while port in used_ports:
+            port += 1
+        used_ports.add(port)
+        raw_sensors = node.get("sensors")
+        if not raw_sensors:
+            print(
+                f"Node '{node_id}' has no sensors defined; "
+                f"using defaults {', '.join(DEFAULT_SENSORS)}"
+            )
+        sensors = [s.strip() for s in (raw_sensors or DEFAULT_SENSORS) if s.strip()]
 
-        normalized["nodes"].append({"id": node_id, "ip": ip, "sensors": sensors})
+        normalized["nodes"].append(
+            {"id": node_id, "ip": ip, "port": port, "sensors": sensors}
+        )
 
     if not normalized["nodes"]:
         raise ValueError("No nodes configured")
@@ -136,7 +176,11 @@ def build_mapping(config: dict) -> dict:
         for idx, sensor in enumerate(node.get("sensors", [])):
             gpio = GPIO_PINS[idx % len(GPIO_PINS)]
             sensors[sensor] = gpio
-        mapping[node_id] = {"ip": node.get("ip", node_id), "sensors": sensors}
+        mapping[node_id] = {
+            "ip": node.get("ip", node_id),
+            "port": node.get("port"),
+            "sensors": sensors,
+        }
     return mapping
 
 
@@ -148,7 +192,6 @@ def main() -> None:
         nodes = int(input("How many nodes? "))
         raw_config = {"nodes": []}
         for i in range(nodes):
-            ip = input(f"Enter IP for node {i + 1}: ").strip()
             sensors = (
                 input(f"Enter sensors for node {i + 1} (comma separated): ")
                 .split(",")
@@ -156,7 +199,6 @@ def main() -> None:
             raw_config["nodes"].append(
                 {
                     "id": f"node{i + 1}",
-                    "ip": ip,
                     "sensors": [s.strip() for s in sensors if s.strip()],
                 }
             )

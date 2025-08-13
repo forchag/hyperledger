@@ -85,20 +85,11 @@ def log_access():
         del ACCESS_LOG[0]
 
 
-# Potential Raspberry Pi addresses to probe when discovering active nodes
-NODE_ADDRESSES = [
-    "192.168.0.163",
-    "192.168.0.199",
-    "192.168.0.200",
-]
-
-# Mapping of node IPs to sensors attached to that node. The key is the IP
-# address and the value is a dictionary mapping the sensor name to the GPIO pin.
-NODE_SENSORS = {
-    "192.168.0.163": {"dht22": 4, "soil": 17},
-    "192.168.0.199": {"dht22": 4, "soil": 17},
-    "192.168.0.200": {"dht22": 4, "soil": 17},
-}
+# Mapping of node identifiers to their IP addresses and attached sensors.  The
+# structure mirrors the output of ``sensor_simulator.build_mapping`` and is
+# populated dynamically when the simulator is launched so that the web
+# interface always reflects the active virtual topology.
+NODE_MAP = {}
 
 
 def compute_merkle_root(tx_hashes):
@@ -136,6 +127,12 @@ def _group_devices(devices):
             node, sensor = dev, "unknown"
         nodes.setdefault(node, {})[sensor] = sensor
     return nodes
+
+
+def _apply_mapping(mapping):
+    """Store the simulator mapping for later discovery requests."""
+    NODE_MAP.clear()
+    NODE_MAP.update(mapping)
 
 
 def build_csv(sensor_id=None, start=None, end=None):
@@ -450,21 +447,47 @@ def discover():
     where sensor data is submitted via HTTP rather than individual networked
     devices. We first consult the in-memory registry populated through the
     ``/register`` endpoint. If devices have been registered we treat them as
-    active nodes. Otherwise we fall back to probing the hard-coded addresses for
-    compatibility with the previous behaviour.
+    active nodes. Otherwise we return any nodes described by the simulator
+    configuration so the dashboard can show the expected topology before
+    readings arrive.
     """
 
     devices = list_devices()
     if devices:
         grouped = _group_devices(devices)
-        nodes = [
-            {"ip": ip, "sensors": sensors} for ip, sensors in grouped.items()
-        ]
+        nodes = []
+        for node_id, sensors in grouped.items():
+            info = NODE_MAP.get(node_id, {})
+            ip = info.get("ip", node_id)
+            port = info.get("port")
+            nodes.append({"ip": ip, "port": port, "sensors": sensors})
         return jsonify({"count": len(nodes), "nodes": nodes})
 
-    active = [ip for ip in NODE_ADDRESSES if ping_node(ip)]
-    nodes = [{"ip": ip, "sensors": NODE_SENSORS.get(ip, {})} for ip in active]
+    nodes = []
+    for node_id, info in NODE_MAP.items():
+        nodes.append(
+            {
+                "ip": info.get("ip", node_id),
+                "port": info.get("port"),
+                "sensors": info.get("sensors", {}),
+            }
+        )
     return jsonify({"count": len(nodes), "nodes": nodes})
+
+
+@app.route("/announce", methods=["POST"])
+def announce():
+    """Record a node broadcast of its address."""
+    data = request.get_json() or {}
+    node_id = data.get("id")
+    ip = data.get("ip")
+    port = data.get("port")
+    if not node_id or not ip or port is None:
+        return "Invalid JSON", 400
+    info = NODE_MAP.get(node_id, {})
+    info.update({"ip": ip, "port": port})
+    NODE_MAP[node_id] = info
+    return jsonify({"status": "announced"})
 
 
 @app.route("/upload", methods=["POST"])
@@ -624,6 +647,11 @@ def start_simulation():
     cfg = root / "simulator_config.json"
     cfg.write_text(json.dumps(config))
     mapping = build_mapping(config)
+    _apply_mapping(mapping)
+    for node_id, info in mapping.items():
+        ip = info.get("ip", node_id)
+        for sensor in info.get("sensors", {}):
+            register_device(f"{node_id}_{sensor}", ip)
     script = root / "sensor_simulator.py"
     # Use the current Python executable instead of a hard-coded "python" string
     # to avoid FileNotFoundError on systems where only ``python3`` is installed.
@@ -642,7 +670,9 @@ def simulation_state():
         config = json.loads(cfg.read_text())
     except Exception:
         return jsonify({"mapping": None})
-    return jsonify({"mapping": build_mapping(config)})
+    mapping = build_mapping(config)
+    _apply_mapping(mapping)
+    return jsonify({"mapping": mapping})
 
 
 @app.route("/tde")

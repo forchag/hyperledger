@@ -30,11 +30,13 @@
     const nodeCount = parseInt(prompt('How many nodes?', '1'));
     if(isNaN(nodeCount) || nodeCount < 1){ return; }
     let nodes = [];
+    const defaultSensors = 'dht22,soil,ph,light,water';
     for(let i=0;i<nodeCount;i++){
-      const ip = prompt(`Enter IP for node ${i+1}`, '192.168.0.100');
-      const sensors = prompt(`Enter sensors for node ${i+1} (comma separated)`, 'dht22,soil,ph,light,water');
-      const sensorList = sensors ? sensors.split(',').map(s => s.trim()).filter(s => s) : [];
-      nodes.push({id:`node${i+1}`, ip, sensors:sensorList});
+      const sensorsInput = prompt(`Enter sensors for node ${i+1} (comma separated)`, defaultSensors);
+      const sensorList = sensorsInput && sensorsInput.trim()
+        ? sensorsInput.split(',').map(s => s.trim()).filter(s => s)
+        : defaultSensors.split(',').map(s => s.trim());
+      nodes.push({id:`node${i+1}`, sensors:sensorList});
     }
     const res = await fetch('/simulate', {
       method:'POST',
@@ -55,9 +57,25 @@
   }
   function displayEndpoints(mapping){
     const list = Object.entries(mapping).map(([node, info]) => {
-      const ip = info.ip || 'N/A';
-      const sensors = info.sensors ? Object.keys(info.sensors).join(', ') : '';
-      return `<li>${node}: ${ip}${sensors ? ' (' + sensors + ')' : ''}</li>`;
+      let ip = node;
+      let port = '';
+      let sensors = [];
+      if(info && typeof info === 'object'){
+        if('ip' in info){
+          ip = info.ip || node;
+          if(info.port){
+            port = ':' + info.port;
+          }
+          if(info.sensors && typeof info.sensors === 'object'){
+            sensors = Object.keys(info.sensors);
+          }else{
+            sensors = Object.keys(info).filter(k => !['ip','port'].includes(k));
+          }
+        }else{
+          sensors = Object.keys(info);
+        }
+      }
+      return `<li>${node}: ${ip}${port}${sensors.length ? ' (' + sensors.join(', ') + ')' : ''}</li>`;
     }).join('');
     document.getElementById('endpoints').innerHTML = list;
   }
