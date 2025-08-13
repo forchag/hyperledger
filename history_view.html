@@ -3,60 +3,97 @@
 <head>
   <meta charset="UTF-8">
   <title>Sensor History</title>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/css/bootstrap.min.css" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: sans-serif; background: #f8f9fa; margin: 0; }
+    header { background: #343a40; color: #fff; text-align: center; padding: 1rem 0; margin-bottom: 1rem; }
+    nav { background: #e9ecef; padding: 0.5rem 1rem; margin-bottom: 1rem; }
+    nav ul { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; }
+    nav li { margin-right: 1rem; }
+    nav a { text-decoration: none; color: #000; padding: 0.5rem 0; display: block; }
+    nav a.active { font-weight: bold; }
+    .container { width: 90%; max-width: 900px; margin: 0 auto; }
+    select { padding: 0.5rem; margin-bottom: 1rem; }
+    #legend { margin-bottom: 0.5rem; }
+    #legend .temp { color: red; margin-right: 1rem; }
+    #legend .hum { color: blue; }
+    #historyChart { width: 100%; max-width: 800px; height: 400px; border: 1px solid #ccc; }
+  </style>
 </head>
-<body class="bg-light">
-  <header class="bg-dark text-white text-center py-3 mb-4">
+<body>
+  <header>
     <h1>AgriCrypt-Chain Farm Dashboard</h1>
   </header>
-  <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4">
-    <div class="container-fluid">
-      <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-        <li class="nav-item"><a class="nav-link" href="/integrity">Data Integrity</a></li>
-      <li class="nav-item"><a class="nav-link" href="/connect">Sensor Connection</a></li>
-      <li class="nav-item"><a class="nav-link" href="/simulate-ui">Sensor Simulator</a></li>
-      <li class="nav-item"><a class="nav-link" href="/status">Network Status</a></li>
-        <li class="nav-item"><a class="nav-link" href="/tde">Threat Detection</a></li>
-        <li class="nav-item"><a class="nav-link active" aria-current="page" href="/history">Sensor History</a></li>
-        <li class="nav-item"><a class="nav-link" href="/explorer">Blockchain Explorer</a></li>
-        <li class="nav-item"><a class="nav-link" href="/devices">Device Management</a></li>
-        <li class="nav-item"><a class="nav-link" href="/storage">Storage Monitor</a></li>
-        <li class="nav-item"><a class="nav-link" href="/recovery">Recovery</a></li>
-        <li class="nav-item"><a class="nav-link" href="/access-log">Access Log</a></li>
-      </ul>
-    </div>
+  <nav>
+    <ul>
+      <li><a href="/integrity">Data Integrity</a></li>
+      <li><a href="/connect">Sensor Connection</a></li>
+      <li><a href="/simulate-ui">Sensor Simulator</a></li>
+      <li><a href="/status">Network Status</a></li>
+      <li><a href="/tde">Threat Detection</a></li>
+      <li><a class="active" aria-current="page" href="/history">Sensor History</a></li>
+      <li><a href="/explorer">Blockchain Explorer</a></li>
+      <li><a href="/devices">Device Management</a></li>
+      <li><a href="/storage">Storage Monitor</a></li>
+      <li><a href="/recovery">Recovery</a></li>
+      <li><a href="/access-log">Access Log</a></li>
+    </ul>
   </nav>
-  <div class="container py-4">
-    <h1 class="mb-3">Sensor History</h1>
-    <select id="sensorSelect" class="form-select mb-3"></select>
-    <canvas id="historyChart" height="100"></canvas>
+  <div class="container">
+    <h1>Sensor History</h1>
+    <select id="sensorSelect"></select>
+    <div id="legend"><span class="temp">Temperature</span><span class="hum">Humidity</span></div>
+    <canvas id="historyChart"></canvas>
   </div>
   <script>
-    let chart;
     async function fetchHistory(id){
       const url = id ? `/history-data?sensor_id=${id}` : '/history-data';
       const res = await fetch(url);
       return await res.json();
     }
     function renderChart(labels, temps, hums){
-      if(chart){
-        chart.data.labels = labels;
-        chart.data.datasets[0].data = temps;
-        chart.data.datasets[1].data = hums;
-        chart.update();
-      } else {
-        chart = new Chart(document.getElementById('historyChart'), {
-          type: 'line',
-          data: {
-            labels: labels,
-            datasets: [
-              {label: 'Temperature', data: temps, borderColor: 'red', fill: false},
-              {label: 'Humidity', data: hums, borderColor: 'blue', fill: false}
-            ]
-          }
-        });
+      const canvas = document.getElementById('historyChart');
+      const ctx = canvas.getContext('2d');
+      const width = canvas.offsetWidth || 600;
+      const height = canvas.offsetHeight || 400;
+      canvas.width = width;
+      canvas.height = height;
+      ctx.clearRect(0,0,width,height);
+      const margin = 40;
+      ctx.strokeStyle = '#000';
+      ctx.beginPath();
+      ctx.moveTo(margin, margin);
+      ctx.lineTo(margin, height - margin);
+      ctx.lineTo(width - margin, height - margin);
+      ctx.stroke();
+      ctx.font = '12px sans-serif';
+      ctx.fillStyle = '#000';
+      ctx.fillText('Time', width / 2 - 20, height - 5);
+      ctx.save();
+      ctx.translate(15, height / 2);
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillText('Value', 0, 0);
+      ctx.restore();
+      const values = temps.concat(hums);
+      if(values.length === 0){
+        ctx.fillText('No data available', margin + 10, height / 2);
+        return;
       }
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      const xStep = (width - 2*margin)/Math.max(labels.length - 1, 1);
+      const yScale = (height - 2*margin)/(max - min || 1);
+      function draw(data, color){
+        ctx.strokeStyle = color;
+        ctx.beginPath();
+        data.forEach((v,i)=>{
+          const x = margin + i*xStep;
+          const y = height - margin - (v - min)*yScale;
+          if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+        });
+        ctx.stroke();
+      }
+      draw(temps,'red');
+      draw(hums,'blue');
     }
     async function init(){
       const data = await fetchHistory();
@@ -76,6 +113,5 @@
     }
     window.onload = init;
   </script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
