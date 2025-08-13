@@ -210,7 +210,12 @@ def index():
                 setInterval(loadReadings, 3000);
                 setInterval(loadBlocks, 3000);
             }
-            window.onload = startPolling;
+            document.addEventListener('DOMContentLoaded', () => {
+                document.getElementById('discover-btn').addEventListener('click', discover);
+                document.getElementById('start-chain-btn').addEventListener('click', startChain);
+                document.getElementById('restart-chain-btn').addEventListener('click', restartChain);
+                startPolling();
+            });
             </script>
         </head>
         <body>
@@ -240,7 +245,7 @@ def index():
                     <div class='card-header'>Nodes</div>
                     <div class='card-body'>
                         <p>Registered nodes: {{count}}</p>
-                        <button class='btn btn-primary' onclick='discover()'>Discover Active Nodes</button>
+                        <button class='btn btn-primary' id='discover-btn'>Discover Active Nodes</button>
                         <p class='mt-2'>Active nodes: <span id='node-count'>0</span></p>
                         <ul id='node-list' class='mb-0'></ul>
                     </div>
@@ -250,8 +255,8 @@ def index():
                 <div class='card h-100'>
                     <div class='card-header'>Blockchain Control</div>
                     <div class='card-body'>
-                        <button class='btn btn-success mb-2' onclick='startChain()'>Start Blockchain</button>
-                        <button class='btn btn-warning' onclick='restartChain()'>Restart Blockchain</button>
+                        <button class='btn btn-success mb-2' id='start-chain-btn'>Start Blockchain</button>
+                        <button class='btn btn-warning' id='restart-chain-btn'>Restart Blockchain</button>
                         <pre id='chain-result' class='mt-2'></pre>
                     </div>
                 </div>
