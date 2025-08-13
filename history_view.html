@@ -29,27 +29,52 @@
   </nav>
   <div class="container py-4">
     <h1 class="mb-3">Sensor History</h1>
+    <select id="sensorSelect" class="form-select mb-3"></select>
     <canvas id="historyChart" height="100"></canvas>
   </div>
   <script>
-    async function loadHistory(){
-      const res = await fetch('/history-data');
-      const data = await res.json();
-      const labels = data.map(d => d.timestamp);
-      const temps = data.map(d => d.temperature);
-      const hums = data.map(d => d.humidity);
-      new Chart(document.getElementById('historyChart'), {
-        type: 'line',
-        data: {
-          labels: labels,
-          datasets: [
-            {label: 'Temperature', data: temps, borderColor: 'red', fill: false},
-            {label: 'Humidity', data: hums, borderColor: 'blue', fill: false}
-          ]
-        }
-      });
+    let chart;
+    async function fetchHistory(id){
+      const url = id ? `/history-data?sensor_id=${id}` : '/history-data';
+      const res = await fetch(url);
+      return await res.json();
     }
-    window.onload = loadHistory;
+    function renderChart(labels, temps, hums){
+      if(chart){
+        chart.data.labels = labels;
+        chart.data.datasets[0].data = temps;
+        chart.data.datasets[1].data = hums;
+        chart.update();
+      } else {
+        chart = new Chart(document.getElementById('historyChart'), {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [
+              {label: 'Temperature', data: temps, borderColor: 'red', fill: false},
+              {label: 'Humidity', data: hums, borderColor: 'blue', fill: false}
+            ]
+          }
+        });
+      }
+    }
+    async function init(){
+      const data = await fetchHistory();
+      const select = document.getElementById('sensorSelect');
+      select.innerHTML = data.sensors.map(id => `<option value="${id}">${id}</option>`).join('');
+      select.addEventListener('change', async () => {
+        const d = await fetchHistory(select.value);
+        const labels = d.records.map(r => r.timestamp);
+        const temps = d.records.map(r => r.temperature);
+        const hums = d.records.map(r => r.humidity);
+        renderChart(labels, temps, hums);
+      });
+      const labels = data.records.map(r => r.timestamp);
+      const temps = data.records.map(r => r.temperature);
+      const hums = data.records.map(r => r.humidity);
+      renderChart(labels, temps, hums);
+    }
+    window.onload = init;
   </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/js/bootstrap.bundle.min.js"></script>
 </body>
