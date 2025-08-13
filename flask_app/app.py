@@ -119,6 +119,25 @@ def compute_merkle_root(tx_hashes):
     return level[0], tree
 
 
+def _group_devices(devices):
+    """Group individual sensor IDs into Raspberry Pi nodes.
+
+    Sensors are registered using identifiers in the form ``<node>_<sensor>``.
+    The dashboard, however, operates at the node level.  This helper collapses
+    the flat list of device IDs returned by :func:`list_devices` into a
+    structure describing each node and its attached sensors.
+    """
+
+    nodes = {}
+    for dev in devices:
+        if "_" in dev:
+            node, sensor = dev.split("_", 1)
+        else:
+            node, sensor = dev, "unknown"
+        nodes.setdefault(node, {})[sensor] = sensor
+    return nodes
+
+
 def build_csv(sensor_id=None, start=None, end=None):
     """Return CSV bytes and SHA256 hash for the requested data."""
     import csv
@@ -142,7 +161,8 @@ def build_csv(sensor_id=None, start=None, end=None):
 
 @app.route("/")
 def index():
-    nodes = list_devices()
+    devices = list_devices()
+    nodes = _group_devices(devices)
     return render_template_string(
         """
         <html>
@@ -158,8 +178,7 @@ def index():
                 document.getElementById('node-count').innerText = data.count;
                 document.getElementById('node-list').innerHTML =
                     data.nodes.map(n => {
-                        const sensors = Object.entries(n.sensors)
-                            .map(([k,v]) => `${k}:${v}`).join(', ');
+                        const sensors = Object.keys(n.sensors).join(', ');
                         return `<li>${n.ip} (${sensors})</li>`;
                     }).join('');
             }
@@ -215,6 +234,7 @@ def index():
                 document.getElementById('start-chain-btn').addEventListener('click', startChain);
                 document.getElementById('restart-chain-btn').addEventListener('click', restartChain);
                 startPolling();
+                discover();
             });
             </script>
         </head>
@@ -310,8 +330,13 @@ def index():
 
 @app.route("/nodes")
 def nodes():
-    nodes = list_devices()
-    return jsonify({"count": len(nodes), "nodes": nodes})
+    devices = list_devices()
+    grouped = _group_devices(devices)
+    node_list = [
+        {"id": ip, "sensors": list(sensors.keys())}
+        for ip, sensors in grouped.items()
+    ]
+    return jsonify({"count": len(node_list), "nodes": node_list})
 
 
 @app.route("/latest-readings")
@@ -424,12 +449,15 @@ def discover():
 
     devices = list_devices()
     if devices:
-        nodes = [{"ip": dev, "sensors": {}} for dev in devices]
+        grouped = _group_devices(devices)
+        nodes = [
+            {"ip": ip, "sensors": sensors} for ip, sensors in grouped.items()
+        ]
         return jsonify({"count": len(nodes), "nodes": nodes})
 
     active = [ip for ip in NODE_ADDRESSES if ping_node(ip)]
     nodes = [{"ip": ip, "sensors": NODE_SENSORS.get(ip, {})} for ip in active]
-    return jsonify({"count": len(active), "nodes": nodes})
+    return jsonify({"count": len(nodes), "nodes": nodes})
 
 
 @app.route("/upload", methods=["POST"])
@@ -750,13 +778,12 @@ def storage_data():
     out = []
     for dev in list_devices():
         for rec in get_sensor_history(dev):
-            out.append(
-                {
-                    "id": dev,
-                    "payload": rec.get("payload"),
-                    "timestamp": rec.get("timestamp"),
-                }
-            )
+            payload = rec.get("payload")
+            if isinstance(payload, dict):
+                cid = payload.get("cid")
+            else:
+                cid = payload
+            out.append({"id": dev, "cid": cid, "timestamp": rec.get("timestamp")})
     return jsonify(out)
 
 
