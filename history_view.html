@@ -4,7 +4,11 @@
   <meta charset="UTF-8">
   <title>Sensor History</title>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/css/bootstrap.min.css" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Use the UMD build of Chart.js so the global `Chart` constructor is
+       available without module tooling. The previous URL delivered an ES
+       module which left `Chart` undefined and prevented graphs from
+       rendering. -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body class="bg-light">
   <header class="bg-dark text-white text-center py-3 mb-4">
