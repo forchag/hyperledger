@@ -29,68 +29,61 @@
   </nav>
   <div class="container py-4">
     <h1 class="mb-3">Sensor History</h1>
-    <select id="sensorSelect" class="form-select mb-3"></select>
-    <canvas id="historyChart" height="100"></canvas>
+    <div id="charts"></div>
   </div>
   <script>
-    let chart;
     async function fetchHistory(id){
       const url = id ? `/history-data?sensor_id=${id}` : '/history-data';
       const res = await fetch(url);
       return await res.json();
     }
-    const SENSOR_FIELDS = {
-      dht22: ['temperature','humidity'],
-      light: ['light'],
-      ph: ['ph'],
-      soil: ['soil_moisture'],
-      water: ['water_level']
-    };
-
-    function buildDatasets(id, records){
-      if(records.length === 0) return [];
-      const ignore = ['id', 'timestamp', 'payload'];
-      let keys = SENSOR_FIELDS[id];
-      if(!keys){
-        keys = Object.keys(records[0]).filter(k => !ignore.includes(k));
-      }
-      const colors = ['red','blue','green','orange','purple','brown','cyan'];
-      return keys.map((key, idx) => ({
-        label: key.replace('_', ' '),
-        data: records.map(r => r[key]),
-        borderColor: colors[idx % colors.length],
-        fill: false
-      }));
-    }
-
-    function renderChart(labels, datasets){
-      if(chart){
-        chart.data.labels = labels;
-        chart.data.datasets = datasets;
-        chart.update();
-      } else {
-        chart = new Chart(document.getElementById('historyChart'), {
-          type: 'line',
-          data: { labels: labels, datasets: datasets }
-        });
-      }
-    }
-
-    async function updateChart(id){
-      const d = await fetchHistory(id);
-      const labels = d.records.map(r => r.timestamp);
-      const datasets = buildDatasets(id, d.records);
-      renderChart(labels, datasets);
-    }
 
     async function init(){
-      const data = await fetchHistory();
-      const select = document.getElementById('sensorSelect');
-      select.innerHTML = data.sensors.map(id => `<option value="${id}">${id}</option>`).join('');
-      select.addEventListener('change', () => updateChart(select.value));
-      const labels = data.records.map(r => r.timestamp);
-      const datasets = buildDatasets(select.value, data.records);
-      renderChart(labels, datasets);
+      const base = await fetchHistory();
+      const sensors = base.sensors;
+      const dataBySensor = {};
+      for(const id of sensors){
+        const d = await fetchHistory(id);
+        dataBySensor[id] = d.records;
+      }
+
+      const ignore = ['id','timestamp','payload'];
+      const fields = new Set();
+      for(const records of Object.values(dataBySensor)){
+        if(records.length){
+          Object.keys(records[0]).forEach(k => { if(!ignore.includes(k)) fields.add(k); });
+        }
+      }
+
+      const colors = ['red','blue','green','orange','purple','brown','cyan'];
+      const container = document.getElementById('charts');
+
+      for(const field of fields){
+        const heading = document.createElement('h3');
+        heading.textContent = field.replace('_',' ');
+        container.appendChild(heading);
+        const canvas = document.createElement('canvas');
+        canvas.height = 100;
+        container.appendChild(canvas);
+
+        const allLabels = Array.from(new Set(
+          Object.values(dataBySensor).flatMap(rec => rec.map(r => r.timestamp))
+        )).sort();
+
+        const datasets = sensors.map((id, idx) => {
+          const map = {};
+          dataBySensor[id].forEach(r => map[r.timestamp] = r[field]);
+          const data = allLabels.map(ts => map[ts] ?? null);
+          return {
+            label: id,
+            data: data,
+            borderColor: colors[idx % colors.length],
+            fill: false
+          };
+        });
+
+        new Chart(canvas, { type: 'line', data: { labels: allLabels, datasets }});
+      }
     }
     window.onload = init;
   </script>
