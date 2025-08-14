@@ -10,6 +10,7 @@ import os
 from urllib.parse import urljoin
 
 import requests
+from requests.exceptions import SSLError
 
 # Base URL of the running Flask application. Defaults to the local
 # development server but can be overridden via the ``SIMULATOR_URL``
@@ -135,6 +136,25 @@ def _simulate_sensor(sensor_id: str, node_ip: str, gpio_pin: int) -> None:
             timeout=5,
             verify=VERIFY,
         )
+    except SSLError as exc:
+        if VERIFY:
+            # Development setups often rely on self-signed certificates.
+            # Retry the request without TLS verification so the simulator
+            # continues to function without manual configuration.
+            try:
+                requests.post(
+                    register_url,
+                    json={"id": sensor_id, "owner": node_ip},
+                    timeout=5,
+                    verify=False,
+                )
+                print(
+                    f"TLS verification failed for {sensor_id}; proceeding without verification"
+                )
+            except Exception as exc2:
+                print(f"register_device failed for {sensor_id}: {exc2}")
+        else:
+            print(f"register_device failed for {sensor_id}: {exc}")
     except Exception as exc:
         print(f"register_device failed for {sensor_id}: {exc}")
 
@@ -161,6 +181,17 @@ def _simulate_sensor(sensor_id: str, node_ip: str, gpio_pin: int) -> None:
 
         try:
             requests.post(sensor_url, json=payload, timeout=5, verify=VERIFY)
+        except SSLError as exc:
+            if VERIFY:
+                try:
+                    requests.post(sensor_url, json=payload, timeout=5, verify=False)
+                    print(
+                        f"TLS verification failed for {sensor_id}; proceeding without verification"
+                    )
+                except Exception as exc2:
+                    print(f"record_sensor_data failed for {sensor_id}: {exc2}")
+            else:
+                print(f"record_sensor_data failed for {sensor_id}: {exc}")
         except Exception as exc:
             print(f"record_sensor_data failed for {sensor_id}: {exc}")
 
