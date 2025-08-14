@@ -37,7 +37,6 @@ from hlf_client import (
     get_state_on,
     get_latest_readings,
     list_devices,
-    list_active_devices,
     get_block,
     get_incidents,
     get_quarantined,
@@ -171,23 +170,20 @@ def index():
             body { padding-top: 20px; }
             </style>
             <script>
-            async function discover() {
+            async function loadNodes() {
                 try {
-                    const port = window.location.port || '8443';
-                    const base = window.location.protocol + '//' + window.location.hostname + ':' + port;
-                    const res = await fetch(base + '/discover');
-                    if (!res.ok) throw new Error('Network response was not ok');
+                    const res = await fetch('/nodes');
                     const raw = await res.json();
-                    const nodes = Array.isArray(raw.nodes) ? raw.nodes : Object.values(raw.nodes || {});
+                    const nodes = Array.isArray(raw.nodes) ? raw.nodes : [];
                     document.getElementById('node-count').innerText = raw.count ?? nodes.length;
                     document.getElementById('node-list').innerHTML =
                         nodes.map(n => {
-                            const ip = n.ip || n;
-                            const sensors = n.sensors ? Object.keys(n.sensors).join(', ') : '';
+                            const ip = n.ip || n.id || n;
+                            const sensors = n.sensors ? n.sensors.join(', ') : '';
                             return `<li>${ip}${sensors ? ' (' + sensors + ')' : ''}</li>`;
                         }).join('');
                 } catch (err) {
-                    console.error('Discover failed:', err);
+                    console.error('Load nodes failed:', err);
                     document.getElementById('node-count').innerText = '0';
                     document.getElementById('node-list').innerHTML = '';
                 }
@@ -250,17 +246,17 @@ def index():
                 }
             }
             function startPolling() {
+                loadNodes();
                 loadReadings();
                 loadBlocks();
+                setInterval(loadNodes, 3000);
                 setInterval(loadReadings, 3000);
                 setInterval(loadBlocks, 3000);
             }
             document.addEventListener('DOMContentLoaded', () => {
-                document.getElementById('discover-btn').addEventListener('click', discover);
                 document.getElementById('start-chain-btn').addEventListener('click', startChain);
                 document.getElementById('restart-chain-btn').addEventListener('click', restartChain);
                 startPolling();
-                discover();
             });
             </script>
         </head>
@@ -291,9 +287,7 @@ def index():
                 <div class='card h-100'>
                     <div class='card-header'>Nodes</div>
                     <div class='card-body'>
-                        <p>Registered nodes: {{count}}</p>
-                        <button class='btn btn-primary' id='discover-btn'>Discover Active Nodes</button>
-                        <p class='mt-2'>Active nodes: <span id='node-count'>0</span></p>
+                        <p>Registered nodes: <span id='node-count'>{{count}}</span></p>
                         <ul id='node-list' class='mb-0'></ul>
                     </div>
                 </div>
@@ -360,10 +354,16 @@ def index():
 def nodes():
     devices = list_devices()
     grouped = _group_devices(devices)
-    node_list = [
-        {"id": ip, "sensors": list(sensors.keys())}
-        for ip, sensors in grouped.items()
-    ]
+    node_list = []
+    for node_id, sensors in grouped.items():
+        info = NODE_MAP.get(node_id, {})
+        node_list.append(
+            {
+                "id": node_id,
+                "ip": info.get("ip", node_id),
+                "sensors": list(sensors.keys()),
+            }
+        )
     return jsonify({"count": len(node_list), "nodes": node_list})
 
 
@@ -493,43 +493,6 @@ def check_and_start_blockchain():
         start_blockchain()
 
 
-@app.route("/discover")
-def discover():
-    """Return a list of active nodes for the dashboard.
-
-    In the original demo this endpoint attempted to ping a predefined list of
-    Raspberry Pi addresses. That approach fails in the simulated environment
-    where sensor data is submitted via HTTP rather than individual networked
-    devices. We first consult the in-memory registry populated through the
-    ``/register`` endpoint. If devices have been registered we treat them as
-    active nodes. Otherwise we return any nodes described by the simulator
-    configuration so the dashboard can show the expected topology before
-    readings arrive.
-    """
-
-    devices = list_active_devices()
-    if devices:
-        grouped = _group_devices(devices)
-        nodes = []
-        for node_id, sensors in grouped.items():
-            info = NODE_MAP.get(node_id, {})
-            ip = info.get("ip", node_id)
-            port = info.get("port")
-            nodes.append({"ip": ip, "port": port, "sensors": sensors})
-        return jsonify({"count": len(nodes), "nodes": nodes})
-
-    nodes = []
-    for node_id, info in NODE_MAP.items():
-        nodes.append(
-            {
-                "ip": info.get("ip", node_id),
-                "port": info.get("port"),
-                "sensors": info.get("sensors", {}),
-            }
-        )
-    return jsonify({"count": len(nodes), "nodes": nodes})
-
-
 @app.route("/announce", methods=["POST"])
 def announce():
     """Record a node broadcast of its address."""
@@ -650,18 +613,14 @@ def status_page():
                 document.getElementById('incident-count').innerText = data.incidents.length;
                 document.getElementById('quarantine-count').innerText = data.quarantined.length;
 
-                const nodeRes = await fetch('/discover');
+                const nodeRes = await fetch('/nodes');
                 const rawNodes = await nodeRes.json();
-                const nodes = Array.isArray(rawNodes)
-                    ? rawNodes
-                    : Array.isArray(rawNodes.nodes)
-                        ? rawNodes.nodes
-                        : Object.values(rawNodes.nodes || rawNodes);
+                const nodes = Array.isArray(rawNodes.nodes) ? rawNodes.nodes : [];
                 document.getElementById('node-count').innerText = nodes.length;
                 document.getElementById('node-list').innerHTML =
                     nodes.map(n => {
-                        const ip = n.ip || n;
-                        const sensors = n.sensors ? Object.keys(n.sensors).join(', ') : '';
+                        const ip = n.ip || n.id || n;
+                        const sensors = n.sensors ? n.sensors.join(', ') : '';
                         return `<li>${ip}${sensors ? ' (' + sensors + ')' : ''}</li>`;
                     }).join('');
             }

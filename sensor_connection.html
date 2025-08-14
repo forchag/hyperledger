@@ -145,10 +145,14 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/js/bootstrap.bundle.min.js"></script>
   <script>
     async function loadNodes(){
-      const res = await fetch('/discover');
+      const res = await fetch('/nodes');
       const data = await res.json();
       const select = document.getElementById('node-select');
-      select.innerHTML = data.nodes.map(n => `<option value="${n.ip}">${n.ip}</option>`).join('');
+      const nodes = Array.isArray(data.nodes) ? data.nodes : [];
+      select.innerHTML = nodes.map(n => {
+        const ip = n.ip || n.id || n;
+        return `<option value="${ip}">${ip}</option>`;
+      }).join('');
     }
 
     document.getElementById('sensor-form').addEventListener('submit', function(e) {

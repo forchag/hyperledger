@@ -121,7 +121,7 @@ def test_simulation_updates_app_and_registers_devices(monkeypatch):
         },
     )
     assert resp.status_code == 200
-    resp = client.get("/discover")
+    resp = client.get("/nodes")
     info = resp.get_json()
     ips = {n["ip"] for n in info["nodes"]}
     assert {m["ip"] for m in mapping.values()} <= ips
