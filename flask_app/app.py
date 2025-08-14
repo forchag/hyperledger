@@ -14,6 +14,7 @@ import json
 import base64
 from datetime import datetime
 import subprocess
+import shutil
 import hashlib
 from pathlib import Path
 import io
@@ -225,12 +226,28 @@ def index():
             async function startChain(){
                 const res = await fetch('/start-blockchain', {method:'POST'});
                 const data = await res.json();
-                document.getElementById('chain-result').textContent = formatChainResponse(data);
+                const result = document.getElementById('chain-result');
+                const alertBox = document.getElementById('chain-alert');
+                result.textContent = formatChainResponse(data);
+                if(!data.started && data.error){
+                    alertBox.textContent = data.error;
+                    alertBox.classList.remove('d-none');
+                } else {
+                    alertBox.classList.add('d-none');
+                }
             }
             async function restartChain(){
                 const res = await fetch('/restart-blockchain', {method:'POST'});
                 const data = await res.json();
-                document.getElementById('chain-result').textContent = formatChainResponse(data);
+                const result = document.getElementById('chain-result');
+                const alertBox = document.getElementById('chain-alert');
+                result.textContent = formatChainResponse(data);
+                if(!data.started && data.error){
+                    alertBox.textContent = data.error;
+                    alertBox.classList.remove('d-none');
+                } else {
+                    alertBox.classList.add('d-none');
+                }
             }
             function startPolling() {
                 loadReadings();
@@ -287,6 +304,7 @@ def index():
                     <div class='card-body'>
                         <button class='btn btn-success mb-2' id='start-chain-btn'>Start Blockchain</button>
                         <button class='btn btn-warning' id='restart-chain-btn'>Restart Blockchain</button>
+                        <div id='chain-alert' class='alert alert-danger d-none mt-2' role='alert'></div>
                         <pre id='chain-result' class='mt-2'></pre>
                     </div>
                 </div>
@@ -373,6 +391,12 @@ def restart_blockchain_route():
     return jsonify({"started": started, "checks": checks, "error": error})
 
 
+@app.route("/health")
+def health():
+    """Simple health probe for monitoring."""
+    return jsonify({"status": "ok"}), 200
+
+
 def ping_node(ip: str) -> bool:
     """Return True if the given IP responds to a single ping."""
     try:
@@ -386,31 +410,56 @@ def ping_node(ip: str) -> bool:
         return False
 
 
+def _has_cmd(cmd: str) -> bool:
+    """Return True if ``cmd`` is found on PATH."""
+    return shutil.which(cmd) is not None
+
+
+def _can_run(args) -> bool:
+    """Return True if executing ``args`` succeeds."""
+    try:
+        subprocess.run(
+            args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True
+        )
+        return True
+    except Exception:
+        return False
+
+
+def compose_cmd():
+    """Return the Docker Compose command if available."""
+    if _has_cmd("docker") and _can_run(["docker", "compose", "version"]):
+        return ["docker", "compose"]
+    if _has_cmd("docker-compose") and _can_run(["docker-compose", "version"]):
+        return ["docker-compose"]
+    return None
+
+
 def run_system_checks():
     """Perform basic environment checks before starting Fabric."""
     checks = []
 
-    def _check(cmd, msg):
-        try:
-            subprocess.run(
-                cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True
-            )
-            checks.append({"check": msg, "ok": True})
-        except Exception:
-            checks.append({"check": msg, "ok": False})
+    docker_ok = _can_run(["docker", "--version"])
+    checks.append({"check": "Docker installed", "ok": docker_ok})
 
-    _check(["docker", "--version"], "Docker installed")
-    _check(["docker-compose", "--version"], "Docker Compose installed")
-    _check(["curl", "--version"], "curl available")
-    return checks
+    compose_ok = compose_cmd() is not None
+    checks.append({"check": "Docker Compose installed", "ok": compose_ok})
+
+    curl_ok = _can_run(["curl", "--version"])
+    checks.append({"check": "curl available", "ok": curl_ok})
+
+    return checks, compose_ok
 
 
 def start_blockchain():
     """Run checks and start the Fabric test network."""
     global BLOCKCHAIN_STARTED
-    checks = run_system_checks()
+    checks, compose_ok = run_system_checks()
     if not all(c["ok"] for c in checks):
-        return checks, False, "System checks failed"
+        error = "System checks failed"
+        if not compose_ok:
+            error = "Docker Compose not found (supports both 'docker compose' and 'docker-compose')."
+        return checks, False, error
     if BLOCKCHAIN_STARTED:
         return checks, True, None
     try:
