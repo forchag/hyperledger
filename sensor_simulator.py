@@ -15,6 +15,9 @@ import requests
 # development server but can be overridden via the ``SIMULATOR_URL``
 # environment variable so the simulator can target remote instances.
 BASE_URL = os.environ.get("SIMULATOR_URL", "https://localhost:8443")
+# Whether to verify TLS certificates when contacting the backend. Set
+# ``SIMULATOR_VERIFY=false`` to disable verification for self-signed dev certs.
+VERIFY = os.environ.get("SIMULATOR_VERIFY", "true").lower() != "false"
 
 GPIO_PINS = [4, 17, 27, 22, 5, 6, 13, 19, 26, 18, 23, 24, 25, 12, 16, 20, 21]
 
@@ -120,7 +123,7 @@ def _simulate_sensor(sensor_id: str, node_ip: str, gpio_pin: int) -> None:
             register_url,
             json={"id": sensor_id, "owner": node_ip},
             timeout=5,
-            verify=False,
+            verify=VERIFY,
         )
     except Exception as exc:
         print(f"register_device failed for {sensor_id}: {exc}")
@@ -147,7 +150,7 @@ def _simulate_sensor(sensor_id: str, node_ip: str, gpio_pin: int) -> None:
         }
 
         try:
-            requests.post(sensor_url, json=payload, timeout=5, verify=False)
+            requests.post(sensor_url, json=payload, timeout=5, verify=VERIFY)
         except Exception as exc:
             print(f"record_sensor_data failed for {sensor_id}: {exc}")
 
