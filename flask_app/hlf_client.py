@@ -12,9 +12,13 @@ from cryptography.hazmat.primitives import serialization
 # a Fabric network to invoke the sensor chaincode.
 # A real implementation would use the Fabric SDK to submit transactions.
 
-# Keep a simple in-memory registry of devices so that the Flask app can
-# demonstrate interactions with multiple nodes without a real Fabric backend.
+# Keep simple in-memory registries so the Flask app can demonstrate node
+# lifecycle events without a real Fabric backend.
 DEVICES = []
+# Track devices that have been promoted to active status.  In the testing
+# environment we automatically activate devices upon registration so sensors
+# appear in both the registered and active lists.
+ACTIVE_DEVICES = []
 # Mapping of sensor ID to a list of recorded readings
 SENSOR_DATA = {}
 INCIDENTS = []
@@ -124,7 +128,19 @@ def register_device(id, owner):
     """Register a device with the ledger."""
     if id not in DEVICES:
         DEVICES.append(id)
+    activate_device(id)
     print(f"[HLF] register device {id} owner {owner}")
+
+
+def activate_device(id):
+    """Mark a device as active if not already present."""
+    if id not in ACTIVE_DEVICES:
+        ACTIVE_DEVICES.append(id)
+
+
+def list_active_devices():
+    """Return a list of currently active device IDs."""
+    return ACTIVE_DEVICES
 
 
 def log_event(device_id, event_type, timestamp):

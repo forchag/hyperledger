@@ -6,6 +6,10 @@ from pathlib import Path
 
 import pytest
 
+# Ensure project root is importable when tests are executed from the tests
+# directory so modules like ``sensor_simulator`` can be resolved.
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+
 # Stub out heavy dependencies imported by sensor_simulator
 hlf_client_stub = types.ModuleType("hlf_client")
 hlf_client_stub.record_sensor_data = lambda *args, **kwargs: None
@@ -105,6 +109,7 @@ def test_simulation_updates_app_and_registers_devices(monkeypatch):
 
     expected = {f"{n}_{s}" for n, info in mapping.items() for s in info["sensors"]}
     assert set(hlf_client.DEVICES) >= expected
+    assert set(hlf_client.ACTIVE_DEVICES) >= expected
 
     # Discover should now report the configured IPs
     resp = client.post(

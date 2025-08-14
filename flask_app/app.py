@@ -36,6 +36,7 @@ from hlf_client import (
     get_state_on,
     get_latest_readings,
     list_devices,
+    list_active_devices,
     get_block,
     get_incidents,
     get_quarantined,
@@ -457,7 +458,7 @@ def discover():
     readings arrive.
     """
 
-    devices = list_devices()
+    devices = list_active_devices()
     if devices:
         grouped = _group_devices(devices)
         nodes = []
