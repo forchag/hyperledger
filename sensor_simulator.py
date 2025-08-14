@@ -14,10 +14,20 @@ import requests
 # Base URL of the running Flask application. Defaults to the local
 # development server but can be overridden via the ``SIMULATOR_URL``
 # environment variable so the simulator can target remote instances.
-BASE_URL = os.environ.get("SIMULATOR_URL", "https://localhost:8443")
-# Whether to verify TLS certificates when contacting the backend. Set
-# ``SIMULATOR_VERIFY=false`` to disable verification for self-signed dev certs.
-VERIFY = os.environ.get("SIMULATOR_VERIFY", "true").lower() != "false"
+# Using the explicit loopback address avoids hostname mismatches when the
+# development TLS certificate lacks a ``localhost`` subject.
+BASE_URL = os.environ.get("SIMULATOR_URL", "https://127.0.0.1:8443")
+
+# Path to a certificate authority bundle used to verify TLS connections.  When
+# ``SIMULATOR_CERT`` is provided the path is passed directly to ``requests`` so
+# self-signed development certificates can be trusted without globally
+# disabling verification.  Otherwise verification can be toggled via the
+# ``SIMULATOR_VERIFY`` flag.
+_CERT_PATH = os.environ.get("SIMULATOR_CERT")
+
+# Whether to verify TLS certificates when contacting the backend.  The value is
+# either the CA bundle path or a boolean depending on the environment.
+VERIFY = _CERT_PATH or os.environ.get("SIMULATOR_VERIFY", "true").lower() != "false"
 
 GPIO_PINS = [4, 17, 27, 22, 5, 6, 13, 19, 26, 18, 23, 24, 25, 12, 16, 20, 21]
 

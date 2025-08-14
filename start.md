@@ -37,6 +37,11 @@ The dashboard will be available at `https://<host-ip>:8443/`.
 ## 6. Run the sensor simulator
 Use the simulator to send fake readings to the dashboard and ledger:
 ```bash
+# Trust the self-signed certificate generated above
+export SIMULATOR_CERT=cert.pem
+# Override the default URL or disable verification if necessary
+# export SIMULATOR_URL=https://<host-ip>:8443
+# export SIMULATOR_VERIFY=false
 python sensor_simulator.py
 ```
 The script prompts for the number of nodes and sensors, then continuously emits sample data.
