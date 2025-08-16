@@ -34,12 +34,20 @@ TEST_NET_DIR="${REPO_ROOT}/fabric-samples/test-network"
 CC_SENSOR="${REPO_ROOT}/chaincode/sensor"
 CC_AGRI="${REPO_ROOT}/chaincode/agri"
 
+# Ensure compose override is available and included
+OVERRIDE_COMPOSE="${TEST_NET_DIR}/compose/docker-compose-test-net-override.yaml"
+cp "${REPO_ROOT}/docker-compose-test-net-override.yaml" "${OVERRIDE_COMPOSE}" 2>/dev/null || true
+if ! grep -q "docker-compose-test-net-override.yaml" "${TEST_NET_DIR}/network.sh"; then
+  sed -i '/COMPOSE_FILES="-f compose\/${COMPOSE_FILE_BASE} -f compose\/${CONTAINER_CLI}\/${CONTAINER_CLI}-${COMPOSE_FILE_BASE}"/a\  COMPOSE_FILES="${COMPOSE_FILES} -f compose/docker-compose-test-net-override.yaml"' "${TEST_NET_DIR}/network.sh"
+fi
+
 # ---- Ledger storage ----
 LEDGER_DIR="${FABRIC_LEDGER_DIR:-${HOME}/fabric-ledger}"
-mkdir -p "${LEDGER_DIR}"/{orderer.example.com,peer0.org1.example.com,peer0.org2.example.com,couchdb0,couchdb1}
+mkdir -p "${LEDGER_DIR}"/{orderer.example.com,peer0.org1.example.com,peer0.org2.example.com,couchdb0,couchdb1,ca_org1,ca_org2,ca_orderer}
 uid="${SUDO_UID:-$(id -u)}"
 gid="${SUDO_GID:-$(id -g)}"
 chown -R "${uid}:${gid}" "${LEDGER_DIR}"
+export FABRIC_LEDGER_DIR="${LEDGER_DIR}"
 
 COMPOSE_TEST_NET="${TEST_NET_DIR}/compose/compose-test-net.yaml"
 COMPOSE_COUCH="${TEST_NET_DIR}/compose/compose-couch.yaml"

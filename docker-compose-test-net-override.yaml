@@ -1,0 +1,48 @@
+# Override for Fabric test network: adds restart policies and persistent volumes
+
+version: '3.7'
+
+services:
+  orderer.example.com:
+    restart: unless-stopped
+    volumes:
+      - ../organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp:/var/hyperledger/orderer/msp
+      - ../organizations/ordererOrganizations/example.com/orderers/orderer.example.com/tls:/var/hyperledger/orderer/tls
+      - ${FABRIC_LEDGER_DIR}/orderer.example.com:/var/hyperledger/production/orderer
+
+  peer0.org1.example.com:
+    restart: unless-stopped
+    volumes:
+      - ../organizations/peerOrganizations/org1.example.com/peers/peer0.org1.example.com:/etc/hyperledger/fabric
+      - ${FABRIC_LEDGER_DIR}/peer0.org1.example.com:/var/hyperledger/production
+
+  peer0.org2.example.com:
+    restart: unless-stopped
+    volumes:
+      - ../organizations/peerOrganizations/org2.example.com/peers/peer0.org2.example.com:/etc/hyperledger/fabric
+      - ${FABRIC_LEDGER_DIR}/peer0.org2.example.com:/var/hyperledger/production
+
+  ca_org1:
+    restart: unless-stopped
+    volumes:
+      - ${FABRIC_LEDGER_DIR}/ca_org1:/etc/hyperledger/fabric-ca-server
+
+  ca_org2:
+    restart: unless-stopped
+    volumes:
+      - ${FABRIC_LEDGER_DIR}/ca_org2:/etc/hyperledger/fabric-ca-server
+
+  ca_orderer:
+    restart: unless-stopped
+    volumes:
+      - ${FABRIC_LEDGER_DIR}/ca_orderer:/etc/hyperledger/fabric-ca-server
+
+  couchdb0:
+    restart: unless-stopped
+    volumes:
+      - ${FABRIC_LEDGER_DIR}/couchdb0:/opt/couchdb/data
+
+  couchdb1:
+    restart: unless-stopped
+    volumes:
+      - ${FABRIC_LEDGER_DIR}/couchdb1:/opt/couchdb/data
