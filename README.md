@@ -35,6 +35,11 @@ instance of the network, then starts the test network and activates the
 `sensor` smart contract so other tools can interact with the
 blockchain.
 
+Ledger data is written to a host directory specified by the `FABRIC_LEDGER_DIR`
+environment variable (default: `~/fabric-ledger`). Subfolders for the orderer,
+each peer, and every CouchDB instance are created automatically so ledger
+contents survive container restarts.
+
 ## Flask GUI
 
 `flask_app/app.py` exposes a small HTTPS GUI and REST API to register devices, upload files, record sensor data and verify stored information. The dashboard shows how many nodes are registered and offers options to inspect stored data.

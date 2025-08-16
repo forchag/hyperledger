@@ -12,6 +12,12 @@ if ! systemctl is-active --quiet docker; then
   sudo systemctl start docker
 fi
 
+# Ensure Docker starts on boot
+if ! systemctl is-enabled --quiet docker; then
+  echo "🔧 Enabling Docker to start on boot..."
+  sudo systemctl enable docker
+fi
+
 # Ensure Docker is reachable (handle stray DOCKER_HOST)
 if ! docker info >/dev/null 2>&1; then
   if [[ -n "${DOCKER_HOST:-}" ]]; then
@@ -27,6 +33,30 @@ REPO_ROOT="$(realpath "$(dirname "$0")")"
 TEST_NET_DIR="${REPO_ROOT}/fabric-samples/test-network"
 CC_SENSOR="${REPO_ROOT}/chaincode/sensor"
 CC_AGRI="${REPO_ROOT}/chaincode/agri"
+
+# ---- Ledger storage ----
+LEDGER_DIR="${FABRIC_LEDGER_DIR:-${HOME}/fabric-ledger}"
+mkdir -p "${LEDGER_DIR}"/{orderer.example.com,peer0.org1.example.com,peer0.org2.example.com,couchdb0,couchdb1}
+uid="${SUDO_UID:-$(id -u)}"
+gid="${SUDO_GID:-$(id -g)}"
+chown -R "${uid}:${gid}" "${LEDGER_DIR}"
+
+COMPOSE_TEST_NET="${TEST_NET_DIR}/compose/compose-test-net.yaml"
+COMPOSE_COUCH="${TEST_NET_DIR}/compose/compose-couch.yaml"
+ldir_esc=${LEDGER_DIR//\//\\}
+if [[ -f "${COMPOSE_TEST_NET}" ]]; then
+  sed -i "s|orderer.example.com:/var/hyperledger/production/orderer|${ldir_esc}/orderer.example.com:/var/hyperledger/production/orderer|" "${COMPOSE_TEST_NET}"
+  sed -i "s|peer0.org1.example.com:/var/hyperledger/production|${ldir_esc}/peer0.org1.example.com:/var/hyperledger/production|" "${COMPOSE_TEST_NET}"
+  sed -i "s|peer0.org2.example.com:/var/hyperledger/production|${ldir_esc}/peer0.org2.example.com:/var/hyperledger/production|" "${COMPOSE_TEST_NET}"
+fi
+if [[ -f "${COMPOSE_COUCH}" ]]; then
+  if ! grep -q "${ldir_esc}/couchdb0" "${COMPOSE_COUCH}"; then
+    sed -i "/container_name: couchdb0/a\    volumes:\n      - ${ldir_esc}/couchdb0:/opt/couchdb/data" "${COMPOSE_COUCH}"
+  fi
+  if ! grep -q "${ldir_esc}/couchdb1" "${COMPOSE_COUCH}"; then
+    sed -i "/container_name: couchdb1/a\    volumes:\n      - ${ldir_esc}/couchdb1:/opt/couchdb/data" "${COMPOSE_COUCH}"
+  fi
+fi
 
 # ---- Bring network up ----
 pushd "${TEST_NET_DIR}" >/dev/null
