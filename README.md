@@ -201,6 +201,26 @@ python tools/data_tool.py verify sensor-1
 
 These examples assume the chaincode has been deployed as described above. The dashboard offers buttons for verifying and recovering data using the same logic.
 
+## Starting the Fabric network at boot
+
+The `systemd/fabric-network@.service` unit lets any Linux user launch the Fabric test network automatically after reboot.
+
+1. Link the unit so your user picks up updates from this repository:
+   ```bash
+   systemctl --user link $(pwd)/systemd/fabric-network@.service
+   systemctl --user daemon-reload
+   ```
+2. Enable the service for the directory name where this repository resides (replace `$(basename "$PWD")` if needed):
+   ```bash
+   systemctl --user enable --now fabric-network@$(basename "$PWD").service
+   ```
+3. Allow the service to run without an active login:
+   ```bash
+   loginctl enable-linger $USER
+   ```
+
+The unit runs `start_network.sh` from the repository and passes `FABRIC_LEDGER_DIR` (default `~/fabric-ledger`) to persist the ledger. Adjust the directory name or ledger path with `systemctl --user edit` if your layout differs.
+
 ## Blockchain design
 
 This project uses **Hyperledger Fabric**, a permissioned blockchain platform. Peers
