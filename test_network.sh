@@ -133,11 +133,13 @@ if [[ ! -d "${TEST_NET_DIR}" ]]; then
   fi
 fi
 
-# Ensure compose override is available and included
+# Ensure compose override is available and always used
 OVERRIDE_COMPOSE="${TEST_NET_DIR}/compose/docker-compose-test-net-override.yaml"
 cp "${REPO_ROOT}/docker-compose-test-net-override.yaml" "${OVERRIDE_COMPOSE}" 2>/dev/null || true
-if ! grep -q "docker-compose-test-net-override.yaml" "${TEST_NET_DIR}/network.sh"; then
-  sed -i '/COMPOSE_FILES="-f compose\/${COMPOSE_FILE_BASE} -f compose\/${CONTAINER_CLI}\/${CONTAINER_CLI}-${COMPOSE_FILE_BASE}"/a\  COMPOSE_FILES="${COMPOSE_FILES} -f compose/docker-compose-test-net-override.yaml"' "${TEST_NET_DIR}/network.sh"
+NETWORK_SCRIPT="${TEST_NET_DIR}/network.sh"
+if [[ -f "${NETWORK_SCRIPT}" ]] && ! grep -q "docker-compose-test-net-override.yaml" "${NETWORK_SCRIPT}"; then
+  cp "${NETWORK_SCRIPT}" "${NETWORK_SCRIPT}.bak"
+  sed -i '/COMPOSE_FILES="/s/"$/ -f compose\/docker-compose-test-net-override.yaml"/' "${NETWORK_SCRIPT}"
 fi
 
 # ---- Ledger storage ----
