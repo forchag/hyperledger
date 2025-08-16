@@ -1,0 +1,14 @@
+[Unit]
+Description=Hyperledger Fabric test network in %h/%i
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/%i
+Environment=FABRIC_LEDGER_DIR=%h/fabric-ledger
+ExecStart=%h/%i/start_network.sh
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
