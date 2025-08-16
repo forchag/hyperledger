@@ -19,6 +19,8 @@ import hashlib
 from pathlib import Path
 import io
 import sys
+import time
+import re
 
 # Ensure the project root is on the module search path so local modules
 # such as ``incident_responder`` can be imported when running this file
@@ -435,8 +437,75 @@ def compose_cmd():
     return None
 
 
+def _container_running(name: str) -> bool:
+    """Return True if the given Docker container is running."""
+    try:
+        result = subprocess.run(
+            ["docker", "inspect", "-f", "{{.State.Running}}", name],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+        )
+        return result.stdout.strip() == "true"
+    except Exception:
+        return False
+
+
+def _ledger_height(peer: str):
+    """Return the ledger height for ``peer`` on ``mychannel`` or ``None``."""
+    try:
+        result = subprocess.run(
+            [
+                "docker",
+                "exec",
+                peer,
+                "peer",
+                "channel",
+                "getinfo",
+                "-c",
+                "mychannel",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            return None
+        match = re.search(r"height: (\d+)", result.stdout)
+        return int(match.group(1)) if match else None
+    except Exception:
+        return None
+
+
+def _chaincode_committed(name: str) -> bool:
+    """Return True if ``name`` chaincode is committed on ``mychannel``."""
+    try:
+        result = subprocess.run(
+            [
+                "docker",
+                "exec",
+                "peer0.org1.example.com",
+                "peer",
+                "lifecycle",
+                "chaincode",
+                "querycommitted",
+                "-C",
+                "mychannel",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+        )
+        return result.returncode == 0 and f"Name: {name}," in result.stdout
+    except Exception:
+        return False
+
+
 def run_system_checks():
-    """Perform basic environment checks before starting Fabric."""
+    """Ensure the Fabric test network is running and healthy."""
     checks = []
 
     docker_ok = _can_run(["docker", "--version"])
@@ -445,32 +514,128 @@ def run_system_checks():
     compose_ok = compose_cmd() is not None
     checks.append({"check": "Docker Compose installed", "ok": compose_ok})
 
-    curl_ok = _can_run(["curl", "--version"])
-    checks.append({"check": "curl available", "ok": curl_ok})
+    if not docker_ok or not compose_ok:
+        return checks, False
 
-    return checks, compose_ok
+    root = Path(__file__).resolve().parent.parent
+    net_dir = root / "fabric-samples" / "test-network"
+    start_script = root / "test_network.sh"
+
+    # Start network if core containers are not running
+    if not _container_running("orderer.example.com"):
+        subprocess.run(["bash", str(start_script)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        time.sleep(3)
+
+    # Verify container health
+    orderer_ok = _container_running("orderer.example.com")
+    peer1_ok = _container_running("peer0.org1.example.com")
+    peer2_ok = _container_running("peer0.org2.example.com")
+    ca1_ok = _container_running("ca_org1")
+    ca2_ok = _container_running("ca_org2")
+    couch0_ok = _container_running("couchdb0")
+    couch1_ok = _container_running("couchdb1")
+    checks.append({"check": "Orderer reachable", "ok": orderer_ok})
+    checks.append({"check": "Peer0.org1 active", "ok": peer1_ok})
+    checks.append({"check": "Peer0.org2 active", "ok": peer2_ok})
+    checks.append({"check": "CA org1 reachable", "ok": ca1_ok})
+    checks.append({"check": "CA org2 reachable", "ok": ca2_ok})
+    checks.append({"check": "CouchDB instances reachable", "ok": couch0_ok and couch1_ok})
+
+    identities_ok = all(
+        [
+            (
+                net_dir
+                / "organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp"
+            ).exists(),
+            (
+                net_dir
+                / "organizations/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp"
+            ).exists(),
+        ]
+    )
+    checks.append({"check": "Identities enrolled", "ok": identities_ok})
+
+    # Ensure channel exists
+    channel_ok = False
+    h1 = _ledger_height("peer0.org1.example.com")
+    h2 = _ledger_height("peer0.org2.example.com")
+    if h1 is None or h2 is None:
+        subprocess.run(
+            ["bash", "network.sh", "createChannel", "-c", "mychannel"],
+            cwd=net_dir,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        time.sleep(2)
+        h1 = _ledger_height("peer0.org1.example.com")
+        h2 = _ledger_height("peer0.org2.example.com")
+    channel_ok = h1 is not None and h2 is not None
+    checks.append({"check": "Channel mychannel exists", "ok": channel_ok})
+
+    ledger_ok = channel_ok and h1 == h2 and h1 is not None
+    checks.append({"check": "Ledger synchronized", "ok": ledger_ok})
+
+    # Ensure required chaincodes are committed
+    cc_sensor = _chaincode_committed("sensor")
+    if not cc_sensor and (root / "chaincode/sensor").is_dir():
+        subprocess.run(
+            [
+                "bash",
+                "network.sh",
+                "deployCC",
+                "-c",
+                "mychannel",
+                "-ccn",
+                "sensor",
+                "-ccl",
+                "go",
+                "-ccp",
+                str(root / "chaincode/sensor"),
+            ],
+            cwd=net_dir,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        cc_sensor = _chaincode_committed("sensor")
+    checks.append({"check": "Chaincode sensor committed", "ok": cc_sensor})
+
+    cc_agri = True
+    if (root / "chaincode/agri").is_dir():
+        cc_agri = _chaincode_committed("agri")
+        if not cc_agri:
+            subprocess.run(
+                [
+                    "bash",
+                    "network.sh",
+                    "deployCC",
+                    "-c",
+                    "mychannel",
+                    "-ccn",
+                    "agri",
+                    "-ccl",
+                    "go",
+                    "-ccp",
+                    str(root / "chaincode/agri"),
+                ],
+                cwd=net_dir,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            cc_agri = _chaincode_committed("agri")
+        checks.append({"check": "Chaincode agri committed", "ok": cc_agri})
+
+    all_ok = all(c["ok"] for c in checks)
+    return checks, all_ok
 
 
 def start_blockchain():
-    """Run checks and start the Fabric test network."""
+    """Run checks and ensure the Fabric test network is ready."""
     global BLOCKCHAIN_STARTED
-    checks, compose_ok = run_system_checks()
-    if not all(c["ok"] for c in checks):
-        error = "System checks failed"
-        if not compose_ok:
-            error = "Docker Compose not found (supports both 'docker compose' and 'docker-compose')."
-        return checks, False, error
-    if BLOCKCHAIN_STARTED:
-        return checks, True, None
-    try:
-        script = Path(__file__).resolve().parent.parent / "test_network.sh"
-        subprocess.Popen(["bash", str(script)])
-        BLOCKCHAIN_STARTED = True
-        print("Blockchain network start initiated")
-        return checks, True, None
-    except Exception as e:
-        print("Failed to start blockchain:", e)
-        return checks, False, str(e)
+    checks, ok = run_system_checks()
+    if not ok:
+        return checks, False, "Baseline checks failed"
+    BLOCKCHAIN_STARTED = True
+    return checks, True, None
 
 
 def restart_blockchain():
