@@ -28,6 +28,12 @@ if ! docker info >/dev/null 2>&1; then
 fi
 docker info >/dev/null 2>&1 || { echo "Error: cannot talk to Docker. Is the daemon running?"; exit 1; }
 
+# Ensure Docker starts on boot
+if ! systemctl is-enabled --quiet docker; then
+  echo "🔧 Enabling Docker to start on boot..."
+  sudo systemctl enable docker
+fi
+
 ########################################
 # Paths                                 #
 ########################################
@@ -124,6 +130,30 @@ if [[ ! -d "${TEST_NET_DIR}" ]]; then
   else
     echo "⚠️  Bootstrap script failed; cloning fabric-samples from GitHub…"
     git clone --depth 1 https://github.com/hyperledger/fabric-samples.git "${REPO_ROOT}/fabric-samples"
+  fi
+fi
+
+# ---- Ledger storage ----
+LEDGER_DIR="${FABRIC_LEDGER_DIR:-${HOME}/fabric-ledger}"
+mkdir -p "${LEDGER_DIR}"/{orderer.example.com,peer0.org1.example.com,peer0.org2.example.com,couchdb0,couchdb1}
+uid="$(id -u)"
+gid="$(id -g)"
+chown -R "${uid}:${gid}" "${LEDGER_DIR}"
+
+COMPOSE_TEST_NET="${TEST_NET_DIR}/compose/compose-test-net.yaml"
+COMPOSE_COUCH="${TEST_NET_DIR}/compose/compose-couch.yaml"
+ldir_esc=${LEDGER_DIR//\//\\}
+if [[ -f "${COMPOSE_TEST_NET}" ]]; then
+  sed -i "s|orderer.example.com:/var/hyperledger/production/orderer|${ldir_esc}/orderer.example.com:/var/hyperledger/production/orderer|" "${COMPOSE_TEST_NET}"
+  sed -i "s|peer0.org1.example.com:/var/hyperledger/production|${ldir_esc}/peer0.org1.example.com:/var/hyperledger/production|" "${COMPOSE_TEST_NET}"
+  sed -i "s|peer0.org2.example.com:/var/hyperledger/production|${ldir_esc}/peer0.org2.example.com:/var/hyperledger/production|" "${COMPOSE_TEST_NET}"
+fi
+if [[ -f "${COMPOSE_COUCH}" ]]; then
+  if ! grep -q "${ldir_esc}/couchdb0" "${COMPOSE_COUCH}"; then
+    sed -i "/container_name: couchdb0/a\    volumes:\n      - ${ldir_esc}/couchdb0:/opt/couchdb/data" "${COMPOSE_COUCH}"
+  fi
+  if ! grep -q "${ldir_esc}/couchdb1" "${COMPOSE_COUCH}"; then
+    sed -i "/container_name: couchdb1/a\    volumes:\n      - ${ldir_esc}/couchdb1:/opt/couchdb/data" "${COMPOSE_COUCH}"
   fi
 fi
 
