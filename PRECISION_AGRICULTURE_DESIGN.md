@@ -297,7 +297,7 @@ agri-sim --sensors 100 --duration 24h
 | Time Window      | 1800 seconds             | Matches decision cycle                  |
 | Merkle Depth     | 6                        | Scales for ~100 sensors                 |
 
-## Raspberry Pi Gateway Restructure
+## 9. Raspberry Pi Gateway Restructure
 
 - Each Raspberry Pi gateway now serves as both a data validator and a blockchain peer.
 - ESP32 sensor nodes communicate with the gateway over LoRa through a HAT or concentrator.
