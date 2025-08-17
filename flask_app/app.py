@@ -52,6 +52,7 @@ import threading
 from incident_responder import watch as incident_watch
 from nft_traceability import AgriNFT, TraceabilityLedger, verify_product
 from sensor_simulator import build_mapping
+from identity_enrollment import enroll_identity
 
 app = Flask(__name__)
 
@@ -504,6 +505,33 @@ def _chaincode_committed(name: str) -> bool:
         return False
 
 
+def ensure_admin_enrollment(net_dir: Path) -> None:
+    """Ensure admin identities have valid MSP/TLS credentials."""
+
+    enroll_identity(
+        "admin",
+        "http://localhost:7054",
+        net_dir
+        / "organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp",
+        net_dir
+        / "organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/tls",
+        "peer0.org1.example.com:7051",
+        "orderer.example.com:7050",
+        secret="adminpw",
+    )
+    enroll_identity(
+        "admin",
+        "http://localhost:8054",
+        net_dir
+        / "organizations/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp",
+        net_dir
+        / "organizations/peerOrganizations/org2.example.com/users/Admin@org2.example.com/tls",
+        "peer0.org2.example.com:9051",
+        "orderer.example.com:7050",
+        secret="adminpw",
+    )
+
+
 def run_system_checks():
     """Ensure the Fabric test network is running and healthy."""
     checks = []
@@ -541,18 +569,22 @@ def run_system_checks():
     checks.append({"check": "CA org2 reachable", "ok": ca2_ok})
     checks.append({"check": "CouchDB instances reachable", "ok": couch0_ok and couch1_ok})
 
-    identities_ok = all(
-        [
-            (
-                net_dir
-                / "organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp"
-            ).exists(),
-            (
-                net_dir
-                / "organizations/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp"
-            ).exists(),
-        ]
-    )
+    try:
+        ensure_admin_enrollment(net_dir)
+        identities_ok = all(
+            [
+                (
+                    net_dir
+                    / "organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp"
+                ).exists(),
+                (
+                    net_dir
+                    / "organizations/peerOrganizations/org2.example.com/users/Admin@org2.example.com/msp"
+                ).exists(),
+            ]
+        )
+    except Exception:
+        identities_ok = False
     checks.append({"check": "Identities enrolled", "ok": identities_ok})
 
     # Ensure channel exists
