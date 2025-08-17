@@ -1,0 +1,15 @@
+FROM python:3.11-slim
+
+WORKDIR /simulator
+
+# Copy only the pieces needed for the simulator
+COPY requirements.txt sensor_simulator.py sensor_profiles.json ./
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Directory holding persisted state/queues
+VOLUME /simulator_state
+
+ENV PYTHONUNBUFFERED=1
+
+ENTRYPOINT ["python", "/simulator/sensor_simulator.py"]
