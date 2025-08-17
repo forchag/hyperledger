@@ -19,8 +19,14 @@ DEVICES = []
 # environment we automatically activate devices upon registration so sensors
 # appear in both the registered and active lists.
 ACTIVE_DEVICES = []
+from typing import Dict, List
+
 # Mapping of sensor ID to a list of recorded readings
-SENSOR_DATA = {}
+SENSOR_DATA: Dict[str, List[dict]] = {}
+# Track the last sequence number seen for each device to enforce monotonic
+# ordering and detect duplicates.  This mirrors the behaviour of the actual
+# chaincode which stores the most recent sequence value on-chain.
+LAST_SEQ: Dict[str, int] = {}
 INCIDENTS = []
 ATTESTATIONS = []
 
@@ -95,7 +101,16 @@ def get_block_events():
 
 
 def record_sensor_data(
-    id, temperature, humidity, soil_moisture, ph, light, water_level, timestamp, payload
+    id,
+    seq,
+    temperature,
+    humidity,
+    soil_moisture,
+    ph,
+    light,
+    water_level,
+    timestamp,
+    payload,
 ):
     """Submit RecordSensorData transaction and keep a history of readings.
 
@@ -107,8 +122,34 @@ def record_sensor_data(
     log_block_event(f"Creating block {CURRENT_BLOCK}")
     log_block_event(f"Hashing block {CURRENT_BLOCK}")
     log_block_event(f"Saving block {CURRENT_BLOCK}")
+    # Reject out-of-order sequences and allow idempotent re-submissions of the
+    # same payload.  Each sensor keeps its own sequence counter so readings can
+    # be uniquely identified.
+    history = SENSOR_DATA.setdefault(id, [])
+    for existing in history:
+        if existing.get("seq") == seq:
+            # If the payload matches exactly treat it as a successful repeat,
+            # otherwise raise an error to simulate chaincode rejection.
+            if (
+                existing.get("temperature") == temperature
+                and existing.get("humidity") == humidity
+                and existing.get("soil_moisture") == soil_moisture
+                and existing.get("ph") == ph
+                and existing.get("light") == light
+                and existing.get("water_level") == water_level
+                and existing.get("payload")
+                == (encrypt_payload(payload) if isinstance(payload, dict) else payload)
+            ):
+                return
+            raise ValueError("duplicate sequence number")
+
+    last = LAST_SEQ.get(id, 0)
+    if seq <= last:
+        raise ValueError("sequence out of order")
+
     entry = {
         "id": id,
+        "seq": seq,
         "temperature": temperature,
         "humidity": humidity,
         "soil_moisture": soil_moisture,
@@ -118,7 +159,8 @@ def record_sensor_data(
         "timestamp": timestamp,
         "payload": encrypt_payload(payload) if isinstance(payload, dict) else payload,
     }
-    SENSOR_DATA.setdefault(id, []).append(entry)
+    history.append(entry)
+    LAST_SEQ[id] = seq
     print(
         f"[HLF] record {id} {temperature} {humidity} {soil_moisture} {ph} {light} {water_level} {timestamp}"
     )

@@ -12,6 +12,7 @@ type SmartContract struct {
 
 type SensorData struct {
 	ID           string  `json:"id"`
+	Seq          int     `json:"seq"`
 	Temperature  float64 `json:"temperature"`
 	Humidity     float64 `json:"humidity"`
 	SoilMoisture float64 `json:"soil_moisture"`
@@ -57,7 +58,9 @@ func (s *SmartContract) RegisterDevice(ctx contractapi.TransactionContextInterfa
 		return err
 	}
 	if exists {
-		return fmt.Errorf("device already registered")
+		// Allow repeated registration attempts to succeed without modifying
+		// existing ledger state so device announces are idempotent.
+		return nil
 	}
 	dev := Device{ID: id, Owner: owner}
 	bytes, err := json.Marshal(dev)
@@ -75,7 +78,7 @@ func (s *SmartContract) deviceExists(ctx contractapi.TransactionContextInterface
 	return bytes != nil, nil
 }
 
-func (s *SmartContract) RecordSensorData(ctx contractapi.TransactionContextInterface, id string, temperature float64, humidity float64, soilMoisture float64, ph float64, light float64, waterLevel float64, timestamp string, payload string) error {
+func (s *SmartContract) RecordSensorData(ctx contractapi.TransactionContextInterface, id string, seq int, temperature float64, humidity float64, soilMoisture float64, ph float64, light float64, waterLevel float64, timestamp string, payload string) error {
 	exists, err := s.deviceExists(ctx, id)
 	if err != nil {
 		return err
@@ -83,8 +86,57 @@ func (s *SmartContract) RecordSensorData(ctx contractapi.TransactionContextInter
 	if !exists {
 		return fmt.Errorf("device not registered")
 	}
+	readingKey := fmt.Sprintf("SD%s_%d", id, seq)
+
+	// Enforce idempotent re-submission: if the exact payload already exists,
+	// consider it a success without writing a new record.
+	if existing, err := ctx.GetStub().GetState(readingKey); err != nil {
+		return err
+	} else if existing != nil {
+		var stored SensorData
+		if err := json.Unmarshal(existing, &stored); err != nil {
+			return err
+		}
+		incoming := SensorData{
+			ID:           id,
+			Seq:          seq,
+			Temperature:  temperature,
+			Humidity:     humidity,
+			SoilMoisture: soilMoisture,
+			PH:           ph,
+			Light:        light,
+			WaterLevel:   waterLevel,
+			Timestamp:    timestamp,
+			Payload:      payload,
+		}
+		incomingBytes, err := json.Marshal(incoming)
+		if err != nil {
+			return err
+		}
+		if string(existing) == string(incomingBytes) {
+			// Exact same payload already recorded
+			return nil
+		}
+		return fmt.Errorf("reading already exists")
+	}
+
+	// Enforce monotonic sequence numbers per device
+	lastKey := "LAST" + id
+	if lastSeqBytes, err := ctx.GetStub().GetState(lastKey); err != nil {
+		return err
+	} else if lastSeqBytes != nil {
+		var lastSeq int
+		if err := json.Unmarshal(lastSeqBytes, &lastSeq); err != nil {
+			return err
+		}
+		if seq <= lastSeq {
+			return fmt.Errorf("sequence out of order")
+		}
+	}
+
 	data := SensorData{
 		ID:           id,
+		Seq:          seq,
 		Temperature:  temperature,
 		Humidity:     humidity,
 		SoilMoisture: soilMoisture,
@@ -98,7 +150,15 @@ func (s *SmartContract) RecordSensorData(ctx contractapi.TransactionContextInter
 	if err != nil {
 		return err
 	}
-	return ctx.GetStub().PutState(id, bytes)
+	if err := ctx.GetStub().PutState(readingKey, bytes); err != nil {
+		return err
+	}
+
+	lastSeqBytes, err := json.Marshal(seq)
+	if err != nil {
+		return err
+	}
+	return ctx.GetStub().PutState(lastKey, lastSeqBytes)
 }
 
 func (s *SmartContract) LogEvent(ctx contractapi.TransactionContextInterface, deviceID string, eventType string, timestamp string) error {

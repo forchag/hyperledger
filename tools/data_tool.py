@@ -11,8 +11,10 @@ def upload(sensor_id: str, json_file: str):
     with open(json_file, "r", encoding="utf-8") as fh:
         payload = json.load(fh)
     payload.setdefault("timestamp", datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"))
+    seq = payload.get("seq", 1)
     hlf_client.record_sensor_data(
         sensor_id,
+        seq,
         payload.get("temperature", 0),
         payload.get("humidity", 0),
         payload.get("soil_moisture", 0),
