@@ -2,6 +2,22 @@
 
 This directory contains a minimal example of integrating Hyperledger Fabric with LoRa sensor nodes. The Fabric chaincode stores device registrations, sensor readings and network events.
 
+## Operational Workflow
+
+To perform an automatic end-to-end smoke test, run `./one_click_test.sh` or
+press **Run One-Click Demo** on the simulator page. The workflow starts the
+network, bootstraps a peer, emits sample readings and prints ledger information.
+Operators can also exercise the full system manually by following these steps:
+
+1. **Enroll the peer identity.** Run `python identity_enrollment.py` on a new node to obtain MSP materials from the certificate authority.
+2. **Retrieve the channel block.** Use `python channel_block_retrieval.py` to download the latest `mychannel` genesis block from an existing peer.
+3. **Join and synchronize.** Execute `python peer_join_sync.py` to join the channel and catch up on ledger data. When the script finishes the peer is ready to service queries and endorsements.
+4. **Register simulator devices.** Launch `python sensor_simulator.py` and follow the prompts to register devices against the Flask API and start submitting mock readings.
+5. **Verify stored data.** Inspect blocks with `python tools/block_inspector.py --info` or visit `/history` and `/integrity` on the dashboard to confirm readings were committed.
+6. **Interpret metrics.** Pages such as `/explorer`, `/storage` and `/status` expose block events, ledger size and incident counts to help validate test results.
+
+Troubleshooting tips and a more detailed walk‑through are available in the operational playbook (`start.md`).
+
 ## Chaincode
 
 `chaincode/sensor/sensor.go` implements a Fabric chaincode that allows:
