@@ -7,6 +7,11 @@ import zlib
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives import serialization
+import threading
+import queue
+import time
+from pathlib import Path
+from collections import defaultdict
 
 # This file is a stub demonstrating how a client might interact with
 # a Fabric network to invoke the sensor chaincode.
@@ -33,6 +38,19 @@ ATTESTATIONS = []
 # Blockchain event log and simple block counter for demo purposes
 BLOCK_EVENTS = []
 CURRENT_BLOCK = 0
+
+# Directory for persisting readings when the network is unavailable
+BACKLOG_DIR = Path(__file__).resolve().parents[1] / "backlog"
+BACKLOG_DIR.mkdir(exist_ok=True)
+MAX_BACKLOG_AGE = 300  # seconds
+
+# Per-device in-memory queues and worker threads
+DEVICE_QUEUES: Dict[str, "queue.Queue"] = {}
+DEVICE_THREADS: Dict[str, threading.Thread] = {}
+_QUEUE_LOCK = threading.Lock()
+
+# Exponential backoff state per device for retrying backlog flushes
+_BACKOFF: Dict[str, float] = defaultdict(lambda: 1.0)
 
 # RSA key pair for encrypting sensor payloads
 PRIVATE_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -100,7 +118,7 @@ def get_block_events():
     return BLOCK_EVENTS
 
 
-def record_sensor_data(
+def _record_sensor_data_direct(
     id,
     seq,
     temperature,
@@ -112,11 +130,7 @@ def record_sensor_data(
     timestamp,
     payload,
 ):
-    """Submit RecordSensorData transaction and keep a history of readings.
-
-    Parameters correspond to the fields stored by the chaincode, providing
-    a complete snapshot of environmental conditions.
-    """
+    """Internal synchronous implementation of the sensor data write."""
     global CURRENT_BLOCK
     CURRENT_BLOCK += 1
     log_block_event(f"Creating block {CURRENT_BLOCK}")
@@ -164,6 +178,109 @@ def record_sensor_data(
     print(
         f"[HLF] record {id} {temperature} {humidity} {soil_moisture} {ph} {light} {water_level} {timestamp}"
     )
+
+
+def _store_backlog(device_id: str, record: tuple) -> None:
+    """Persist a failed record to disk for later retry."""
+    BACKLOG_DIR.mkdir(exist_ok=True)
+    path = BACKLOG_DIR / f"{device_id}.jsonl"
+    entry = {"time": time.time(), "args": record}
+    with path.open("a") as fh:
+        fh.write(json.dumps(entry) + "\n")
+
+
+def _flush_backlog(device_id: str) -> bool:
+    """Attempt to flush the backlog for a device.
+
+    Returns ``True`` if the backlog was fully processed, ``False`` otherwise.
+    """
+    path = BACKLOG_DIR / f"{device_id}.jsonl"
+    if not path.exists():
+        _BACKOFF[device_id] = 1.0
+        return True
+    remaining = []
+    with path.open() as fh:
+        lines = fh.readlines()
+    for line in lines:
+        data = json.loads(line)
+        if time.time() - data.get("time", 0) > MAX_BACKLOG_AGE:
+            # Drop stale entry
+            continue
+        try:
+            _record_sensor_data_direct(*data["args"])
+        except Exception:
+            remaining.append(data)
+            break
+    if remaining:
+        with path.open("w") as fh:
+            for item in remaining:
+                fh.write(json.dumps(item) + "\n")
+        _schedule_retry(device_id)
+        return False
+    path.unlink()
+    _BACKOFF[device_id] = 1.0
+    return True
+
+
+def _schedule_retry(device_id: str) -> None:
+    """Schedule a retry for the given device using exponential backoff."""
+    delay = _BACKOFF[device_id]
+    timer = threading.Timer(delay, _flush_backlog, args=(device_id,))
+    timer.daemon = True
+    timer.start()
+    _BACKOFF[device_id] = min(delay * 2, 60)
+
+
+def _worker(device_id: str) -> None:
+    """Process a device's queue serially."""
+    q = DEVICE_QUEUES[device_id]
+    while True:
+        record = q.get()
+        try:
+            _record_sensor_data_direct(*record)
+            _flush_backlog(device_id)
+        except Exception:
+            _store_backlog(device_id, record)
+            _schedule_retry(device_id)
+        q.task_done()
+
+
+def record_sensor_data(
+    id,
+    seq,
+    temperature,
+    humidity,
+    soil_moisture,
+    ph,
+    light,
+    water_level,
+    timestamp,
+    payload,
+):
+    """Enqueue sensor data for serial processing per device."""
+    with _QUEUE_LOCK:
+        q = DEVICE_QUEUES.setdefault(id, queue.Queue())
+        if id not in DEVICE_THREADS or not DEVICE_THREADS[id].is_alive():
+            t = threading.Thread(target=_worker, args=(id,), daemon=True)
+            DEVICE_THREADS[id] = t
+            t.start()
+    q.put((id, seq, temperature, humidity, soil_moisture, ph, light, water_level, timestamp, payload))
+
+
+def get_backlog_stats() -> Dict[str, int]:
+    """Return the number of queued readings per device."""
+    stats: Dict[str, int] = {}
+    if not BACKLOG_DIR.exists():
+        return stats
+    for path in BACKLOG_DIR.glob("*.jsonl"):
+        try:
+            with path.open() as fh:
+                count = sum(1 for _ in fh)
+            if count:
+                stats[path.stem] = count
+        except FileNotFoundError:
+            continue
+    return stats
 
 
 def register_device(id, owner):
