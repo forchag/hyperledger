@@ -37,6 +37,37 @@ GPIO_PINS = [4, 17, 27, 22, 5, 6, 13, 19, 26, 18, 23, 24, 25, 12, 16, 20, 21]
 # avoids ``N/A`` values in the web interface.
 DEFAULT_SENSORS = ["dht22", "light", "ph", "soil", "water"]
 
+# Directory used to persist per-device sequence numbers.  The location can be
+# overridden via ``SIMULATOR_STATE_DIR`` so tests or multiple simulator
+# instances do not collide.  Each device gets a small file containing the last
+# sequence number that was transmitted.
+STATE_DIR = Path(os.environ.get("SIMULATOR_STATE_DIR", "simulator_state"))
+
+
+def _load_sequence(device_id: str) -> int:
+    """Return the next sequence number for ``device_id``.
+
+    The simulator stores the last used value in ``STATE_DIR/<device_id>.seq``.
+    When no file is present the counter starts at ``1``.  The returned value is
+    the number that should be used for the next reading.
+    """
+
+    path = STATE_DIR / f"{device_id}.seq"
+    try:
+        return int(path.read_text()) + 1
+    except FileNotFoundError:
+        return 1
+    except Exception:
+        # Corrupt state files should not crash the simulator; start fresh.
+        return 1
+
+
+def _save_sequence(device_id: str, seq: int) -> None:
+    """Persist ``seq`` for ``device_id`` to disk."""
+
+    STATE_DIR.mkdir(exist_ok=True)
+    (STATE_DIR / f"{device_id}.seq").write_text(str(seq))
+
 
 def _random_ip(used: set) -> str:
     """Return a unique IP in the ``192.168.0.x`` range.
@@ -158,6 +189,8 @@ def _simulate_sensor(sensor_id: str, node_ip: str, gpio_pin: int) -> None:
     except Exception as exc:
         print(f"register_device failed for {sensor_id}: {exc}")
 
+    seq = _load_sequence(sensor_id)
+
     while True:
         temperature = round(random.uniform(10, 35), 2)
         humidity = round(random.uniform(30, 90), 2)
@@ -168,6 +201,8 @@ def _simulate_sensor(sensor_id: str, node_ip: str, gpio_pin: int) -> None:
         ts = datetime.utcnow().isoformat()
         payload = {
             "id": sensor_id,
+            "device_id": sensor_id,
+            "seq": seq,
             "temperature": temperature,
             "humidity": humidity,
             "soil_moisture": soil_moisture,
@@ -194,6 +229,9 @@ def _simulate_sensor(sensor_id: str, node_ip: str, gpio_pin: int) -> None:
                 print(f"record_sensor_data failed for {sensor_id}: {exc}")
         except Exception as exc:
             print(f"record_sensor_data failed for {sensor_id}: {exc}")
+
+        _save_sequence(sensor_id, seq)
+        seq += 1
 
         print(
             f"{sensor_id} GPIO{gpio_pin} -> T:{temperature} H:{humidity} "
