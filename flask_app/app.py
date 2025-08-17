@@ -1086,6 +1086,19 @@ def simulate_recovery():
     return jsonify({"message": f"Replicated {count} records"})
 
 
+@app.route("/bootstrap")
+def bootstrap_page():
+    template = Path(__file__).resolve().parent.parent / "bootstrap_status.html"
+    return render_template_string(template.read_text())
+
+
+@app.route("/bootstrap-status")
+def bootstrap_status():
+    status_file = Path(__file__).resolve().parent.parent / "bootstrap_status.json"
+    if status_file.exists():
+        return jsonify(json.loads(status_file.read_text()))
+    return jsonify({"ready": False})
+
 @app.route("/verify-product/<int:nft_id>")
 def verify_product_route(nft_id):
     try:
