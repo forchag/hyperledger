@@ -82,6 +82,21 @@ def test_build_mapping_handles_empty_sensor_lists():
     assert mapping["node2"]["sensors"]["only"] == GPIO_PINS[0]
 
 
+def test_sequence_persistence(tmp_path, monkeypatch):
+    """Sequence numbers should persist across simulator restarts."""
+
+    monkeypatch.setenv("SIMULATOR_STATE_DIR", str(tmp_path))
+    # Reload module so STATE_DIR picks up the patched environment variable.
+    sim_mod = importlib.reload(importlib.import_module("sensor_simulator"))
+
+    seq1 = sim_mod._load_sequence("dev1")
+    assert seq1 == 1
+    sim_mod._save_sequence("dev1", seq1)
+
+    seq2 = sim_mod._load_sequence("dev1")
+    assert seq2 == seq1 + 1
+
+
 def test_simulation_updates_app_and_registers_devices(monkeypatch):
     """Posting to /simulate should populate NODE_MAP and register sensors."""
 
