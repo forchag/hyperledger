@@ -66,9 +66,9 @@ graph LR
   - AES-128 LoRa Payloads
   - TLS 1.3 gRPC"]]:::annot --> VAL
   ANNOT2[["Performance:
-  - 5-sec Block Time
-  - 42 ms Tx Latency
-  - 225 KB/day Storage"]]:::annot --> ARC
+  - 30–120 min Blocks
+  - Event-triggered
+  - Reduced Storage"]]:::annot --> ARC
   ANNOT3[["Ledger Replication:
   - Full Copy: Validator
   - Partial: Gateway (7 days)
@@ -128,7 +128,7 @@ func (v *Validator) runPBFT() {
 ```
 
 **Block Creation**:
-- **Block Size**: 50 transactions or 5-second timeout
+- **Block Size**: 50 transactions or 30–120 minute timeout (configurable)
 - **Endorsement Policy**: `AND(Org1.Peer, Org2.Peer)`
 
 ---

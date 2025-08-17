@@ -14,24 +14,24 @@ graph TD
   %% ===== SENSING LAYER =====
   subgraph SNS[Sensing Layer]
     direction TB
-    Z1["Zone 1 (1 km²)"] --> |LoRa| GW
-    Z2["Zone 2 (1 km²)"] --> |LoRa| GW
-    ZN["Zone N"] --> |LoRa| GW
 
-    subgraph Z1[ ]
-      SM1[Soil Moisture] --> RP1[RPi 4B + LoRa]
-      T1[Temperature] --> RP1
-      NPK1[NPK Sensor] --> RP1
+    subgraph Z1["Zone 1 (1 km²)"]
+      SM1[Soil Moisture] --> ESP1[ESP32 Node]
+      T1[Temperature] --> ESP1
+      NPK1[NPK Sensor] --> ESP1
+      ESP1 --> |LoRa| GW
       style Z1 fill:#e6f7ff,stroke:#91d5ff
     end
 
-    subgraph Z2[ ]
-      SM2[Soil Moisture] --> RP2[RPi 4B + LoRa]
-      T2[Temperature] --> RP2
-      NPK2[NPK Sensor] --> RP2
+    subgraph Z2["Zone 2 (1 km²)"]
+      SM2[Soil Moisture] --> ESP2[ESP32 Node]
+      T2[Temperature] --> ESP2
+      NPK2[NPK Sensor] --> ESP2
+      ESP2 --> |LoRa| GW
       style Z2 fill:#e6f7ff,stroke:#91d5ff
     end
 
+    ZN[Zone N] --> |LoRa| GW
     style SNS fill:#f0f9e8,stroke:#43a2ca
   end
 
@@ -98,8 +98,9 @@ graph TD
 
   ANNOT2[["Hyperledger Fabric:
   - PBFT Consensus
-  - 5-sec Block Time
-  - 225 KB/day Storage"]] --> VAL
+  - 30–120 min Blocks
+  - Event-triggered writing
+  - Reduced Storage"]] --> VAL
 
   ANNOT3[["Power Metrics:
   - 10W per Node
@@ -125,9 +126,9 @@ graph TD
 - **Soil Moisture Sensor**: Capacitive V1.2 (±3% accuracy)
 - **Temperature Sensor**: DS18B20 (±0.5°C accuracy)
 - **NPK Sensor**: JXCT-IoT (N/P/K detection)
-- **Raspberry Pi 4B**: 1.5GHz quad-core, 4GB RAM
-- **LoRa Module**: SX1278 (20dBm output)
-- *Sampling Rate*: 10-second intervals
+- **ESP32**: dual-core 240 MHz, 520 KB RAM
+- **LoRa Module**: SX1278 (20 dBm output)
+- *Reporting Modes*: periodic 30–120 min updates or instant alerts on threshold breaches
 
 #### 3. Edge Processing Layer
 - **Feature Extractor**:
