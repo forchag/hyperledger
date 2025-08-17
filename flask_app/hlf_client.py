@@ -25,7 +25,7 @@ DEVICES = []
 # environment we automatically activate devices upon registration so sensors
 # appear in both the registered and active lists.
 ACTIVE_DEVICES = []
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 # Mapping of sensor ID to a list of recorded readings
 SENSOR_DATA: Dict[str, List[dict]] = {}
@@ -39,6 +39,7 @@ ATTESTATIONS = []
 # Blockchain event log and simple block counter for demo purposes
 BLOCK_EVENTS = []
 CURRENT_BLOCK = 0
+BLOCK_BUFFER: List[dict] = []
 
 # Block creation policy
 BLOCK_INTERVAL_MINUTES = int(os.getenv("BLOCK_INTERVAL_MINUTES", "60"))
@@ -128,28 +129,28 @@ def get_block_events():
     return BLOCK_EVENTS
 
 
-def _should_create_block(sensor_id, soil_moisture, ph, water_level) -> bool:
-    """Determine if a new block should be created.
+def _should_create_block(sensor_id, soil_moisture, ph, water_level) -> Optional[str]:
+    """Determine if a new block should be created and return its mode.
 
-    A block is cut if either the configured time interval has elapsed or an
-    event trigger is observed (low soil moisture, sudden pH shift or low water
-    level).
+    Returns ``"event"`` if an anomaly is detected (low soil moisture, sudden
+    pH shift or low water level) and ``"scheduled"`` if the configured time
+    interval has elapsed.  ``None`` is returned if no block should be cut.
     """
     global LAST_BLOCK_TIME
     now = time.time()
     interval = BLOCK_INTERVAL_MINUTES * 60
-    create = False
-    if LAST_BLOCK_TIME == 0.0 or now - LAST_BLOCK_TIME >= interval:
-        create = True
+    mode: Optional[str] = None
     if soil_moisture < SOIL_MOISTURE_THRESHOLD or water_level < WATER_LEVEL_THRESHOLD:
-        create = True
+        mode = "event"
     last_ph = LAST_PH.get(sensor_id)
     if last_ph is not None and abs(ph - last_ph) >= PH_CHANGE_THRESHOLD:
-        create = True
+        mode = "event"
+    if mode is None and (LAST_BLOCK_TIME == 0.0 or now - LAST_BLOCK_TIME >= interval):
+        mode = "scheduled"
     LAST_PH[sensor_id] = ph
-    if create:
+    if mode:
         LAST_BLOCK_TIME = now
-    return create
+    return mode
 
 
 def _record_sensor_data_direct(
@@ -166,11 +167,6 @@ def _record_sensor_data_direct(
 ):
     """Internal synchronous implementation of the sensor data write."""
     global CURRENT_BLOCK
-    if _should_create_block(id, soil_moisture, ph, water_level):
-        CURRENT_BLOCK += 1
-        log_block_event(f"Creating block {CURRENT_BLOCK}")
-        log_block_event(f"Hashing block {CURRENT_BLOCK}")
-        log_block_event(f"Saving block {CURRENT_BLOCK}")
     # Reject out-of-order sequences and allow idempotent re-submissions of the
     # same payload.  Each sensor keeps its own sequence counter so readings can
     # be uniquely identified.
@@ -210,6 +206,16 @@ def _record_sensor_data_direct(
     }
     history.append(entry)
     LAST_SEQ[id] = seq
+    BLOCK_BUFFER.append(entry)
+    mode = _should_create_block(id, soil_moisture, ph, water_level)
+    if mode:
+        CURRENT_BLOCK += 1
+        log_block_event(
+            f"Creating {mode} block {CURRENT_BLOCK} with {len(BLOCK_BUFFER)} records"
+        )
+        log_block_event(f"Hashing block {CURRENT_BLOCK}")
+        log_block_event(f"Saving block {CURRENT_BLOCK}")
+        BLOCK_BUFFER.clear()
     print(
         f"[HLF] record {id} {temperature} {humidity} {soil_moisture} {ph} {light} {water_level} {timestamp}"
     )
