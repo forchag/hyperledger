@@ -12,6 +12,11 @@ from urllib.parse import urljoin
 
 import requests
 from requests.exceptions import SSLError
+import hmac
+import hashlib
+import uuid
+import logging
+from prometheus_client import Counter, start_http_server, CollectorRegistry
 
 # Base URL of the running Flask application. Defaults to the local
 # development server but can be overridden via the ``SIMULATOR_URL``
@@ -30,6 +35,24 @@ _CERT_PATH = os.environ.get("SIMULATOR_CERT")
 # Whether to verify TLS certificates when contacting the backend.  The value is
 # either the CA bundle path or a boolean depending on the environment.
 VERIFY = _CERT_PATH or os.environ.get("SIMULATOR_VERIFY", "true").lower() != "false"
+
+HMAC_KEY = os.environ.get("SIMULATOR_HMAC_KEY", "").encode()
+CLIENT_CERT = os.environ.get("SIMULATOR_CLIENT_CERT")
+CLIENT_KEY = os.environ.get("SIMULATOR_CLIENT_KEY")
+CERT = (CLIENT_CERT, CLIENT_KEY) if CLIENT_CERT and CLIENT_KEY else None
+METRICS_PORT = int(os.environ.get("SIMULATOR_METRICS_PORT", "9101"))
+
+REGISTRY = CollectorRegistry()
+SEND_COUNTER = Counter("simulator_send_total", "Total payloads sent", registry=REGISTRY)
+SUCCESS_COUNTER = Counter("simulator_success_total", "Successful payloads", registry=REGISTRY)
+
+try:
+    start_http_server(METRICS_PORT, registry=REGISTRY)
+except OSError:
+    pass
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("simulator")
 
 GPIO_PINS = [4, 17, 27, 22, 5, 6, 13, 19, 26, 18, 23, 24, 25, 12, 16, 20, 21]
 
@@ -250,25 +273,31 @@ def _simulate_sensor(sensor_id: str, node_ip: str, gpio_pin: int) -> None:
 
     # Announce the device only once even if the simulator thread restarts.
     if sensor_id not in ANNOUNCED:
+        reg_body = json.dumps({"id": sensor_id, "owner": node_ip}, sort_keys=True).encode()
+        headers = {"Content-Type": "application/json"}
+        if HMAC_KEY:
+            sig = hmac.new(HMAC_KEY, reg_body, hashlib.sha256).hexdigest()
+            headers["X-Payload-Signature"] = sig
         try:
             requests.post(
                 register_url,
-                json={"id": sensor_id, "owner": node_ip},
+                data=reg_body,
+                headers=headers,
                 timeout=5,
                 verify=VERIFY,
+                cert=CERT,
             )
             ANNOUNCED.add(sensor_id)
         except SSLError as exc:
             if VERIFY:
-                # Development setups often rely on self-signed certificates.
-                # Retry the request without TLS verification so the simulator
-                # continues to function without manual configuration.
                 try:
                     requests.post(
                         register_url,
-                        json={"id": sensor_id, "owner": node_ip},
+                        data=reg_body,
+                        headers=headers,
                         timeout=5,
                         verify=False,
+                        cert=CERT,
                     )
                     ANNOUNCED.add(sensor_id)
                     print(
@@ -295,6 +324,7 @@ def _simulate_sensor(sensor_id: str, node_ip: str, gpio_pin: int) -> None:
         light = _generate_value(metrics.get("light", DEFAULT_METRICS["light"]), seq, mode)
         water_level = _generate_value(metrics.get("water_level", DEFAULT_METRICS["water_level"]), seq, mode)
         ts = datetime.utcnow().isoformat()
+        tx_id = str(uuid.uuid4())
         payload = {
             "id": sensor_id,
             "device_id": sensor_id,
@@ -308,15 +338,60 @@ def _simulate_sensor(sensor_id: str, node_ip: str, gpio_pin: int) -> None:
             "timestamp": ts,
             "gpio": gpio_pin,
             "simulated": True,
+            "tx_id": tx_id,
         }
 
+        body = json.dumps(payload, sort_keys=True).encode()
+        headers = {"Content-Type": "application/json"}
+        if HMAC_KEY:
+            headers["X-Payload-Signature"] = hmac.new(
+                HMAC_KEY, body, hashlib.sha256
+            ).hexdigest()
+
         submit_dt = datetime.utcnow()
+        SEND_COUNTER.inc()
         try:
-            requests.post(sensor_url, json=payload, timeout=5, verify=VERIFY)
+            requests.post(
+                sensor_url,
+                data=body,
+                headers=headers,
+                timeout=5,
+                verify=VERIFY,
+                cert=CERT,
+            )
+            SUCCESS_COUNTER.inc()
+            logger.info(
+                json.dumps(
+                    {
+                        "event": "sent",
+                        "tx_id": tx_id,
+                        "device_id": sensor_id,
+                        "seq": seq,
+                    }
+                )
+            )
         except SSLError as exc:
             if VERIFY:
                 try:
-                    requests.post(sensor_url, json=payload, timeout=5, verify=False)
+                    requests.post(
+                        sensor_url,
+                        data=body,
+                        headers=headers,
+                        timeout=5,
+                        verify=False,
+                        cert=CERT,
+                    )
+                    SUCCESS_COUNTER.inc()
+                    logger.info(
+                        json.dumps(
+                            {
+                                "event": "sent",
+                                "tx_id": tx_id,
+                                "device_id": sensor_id,
+                                "seq": seq,
+                            }
+                        )
+                    )
                     print(
                         f"TLS verification failed for {sensor_id}; proceeding without verification"
                     )
@@ -331,7 +406,10 @@ def _simulate_sensor(sensor_id: str, node_ip: str, gpio_pin: int) -> None:
         for _ in range(10):
             try:
                 resp = requests.get(
-                    urljoin(BASE_URL, "/latest-readings"), timeout=5, verify=VERIFY
+                    urljoin(BASE_URL, "/latest-readings"),
+                    timeout=5,
+                    verify=VERIFY,
+                    cert=CERT,
                 )
                 latest = resp.json()
                 rec = latest.get(sensor_id)
