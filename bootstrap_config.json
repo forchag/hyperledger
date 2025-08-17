@@ -1,0 +1,12 @@
+{
+  "channel": "mychannel",
+  "orderer": "orderer.example.com:7050",
+  "ca_cert": "tls/ca.crt",
+  "ca_url": "https://ca.example.com:7054",
+  "node_name": "peer0.org1.example.com",
+  "peer_endpoint": "peer0.org1.example.com:7051",
+  "msp_dir": "msp",
+  "tls_dir": "tls",
+  "block_path": "mychannel.block",
+  "required_chaincodes": ["sensor", "supply"]
+}
