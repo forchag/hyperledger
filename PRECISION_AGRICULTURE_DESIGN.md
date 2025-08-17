@@ -297,4 +297,14 @@ agri-sim --sensors 100 --duration 24h
 | Time Window      | 1800 seconds             | Matches decision cycle                  |
 | Merkle Depth     | 6                        | Scales for ~100 sensors                 |
 
+## Raspberry Pi Gateway Restructure
+
+- Each Raspberry Pi gateway now serves as both a data validator and a blockchain peer.
+- ESP32 sensor nodes communicate with the gateway over LoRa through a HAT or concentrator.
+- Gateways validate incoming packets (checksums, source ID, timestamp) and buffer normal readings locally.
+- Anomalous data is marked urgent and immediately prepared for blockchain submission.
+- Gateways form a Wi-Fi mesh using WokFi adapters to share buffered data and provide redundancy.
+- Any gateway can take over if a neighbor fails and synchronize pending transactions.
+- Because every gateway runs a full blockchain client, each maintains a distributed ledger copy and participates in block creation.
+
 This blueprint reduces data volume by over four orders of magnitude while maintaining secure, verifiable records on the blockchain.
