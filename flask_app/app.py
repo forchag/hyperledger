@@ -53,6 +53,7 @@ from incident_responder import watch as incident_watch
 from nft_traceability import AgriNFT, TraceabilityLedger, verify_product
 from sensor_simulator import build_mapping
 from identity_enrollment import enroll_identity
+from channel_block_retrieval import fetch_channel_block
 
 app = Flask(__name__)
 
@@ -603,6 +604,29 @@ def run_system_checks():
         h2 = _ledger_height("peer0.org2.example.com")
     channel_ok = h1 is not None and h2 is not None
     checks.append({"check": "Channel mychannel exists", "ok": channel_ok})
+
+    # Retrieve the channel configuration block so that subsequent components can
+    # join the channel without relying on out-of-band distribution of the
+    # genesis file.  Failures are captured in the checks list but do not abort
+    # the health run.
+    block_ok = False
+    if channel_ok:
+        ca_cert = (
+            net_dir
+            / "organizations"
+            / "ordererOrganizations"
+            / "example.com"
+            / "msp"
+            / "tlscacerts"
+            / "tlsca.example.com-cert.pem"
+        )
+        dest = net_dir / "channel-artifacts" / "mychannel.block"
+        try:
+            fetch_channel_block("mychannel", "orderer.example.com:7050", ca_cert, dest)
+            block_ok = True
+        except Exception:
+            block_ok = False
+    checks.append({"check": "Channel config block fetched", "ok": block_ok})
 
     ledger_ok = channel_ok and h1 == h2 and h1 is not None
     checks.append({"check": "Ledger synchronized", "ok": ledger_ok})
