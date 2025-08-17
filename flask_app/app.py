@@ -971,6 +971,12 @@ def verify_data():
     return jsonify({"verified": uploaded_hash == expected_hash})
 
 
+@app.route("/backlog")
+def backlog_stats():
+    """Expose counts of buffered readings per device."""
+    return jsonify(hlf_client.get_backlog_stats())
+
+
 @app.route("/sensor", methods=["POST"])
 def record_sensor():
     if request.is_json:
