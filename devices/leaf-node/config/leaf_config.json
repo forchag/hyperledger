@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Leaf Node Configuration",
+  "type": "object",
+  "properties": {
+    "device_id": {"type": "string"},
+    "sensors": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "sample_period_sec": {"type": "integer", "minimum": 1},
+    "uplink_period_sec": {"type": "integer", "minimum": 1},
+    "wifi_ssid": {"type": "string"},
+    "wifi_psk": {"type": "string"},
+    "pi_targets": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "hmac_key": {"type": "string"},
+    "ed25519_sk": {"type": "string"},
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": {"type": "number"}
+    },
+    "crt_moduli": {
+      "type": "array",
+      "items": {"type": "integer"}
+    }
+  },
+  "required": [
+    "device_id",
+    "sensors",
+    "sample_period_sec",
+    "uplink_period_sec",
+    "wifi_ssid",
+    "wifi_psk",
+    "pi_targets",
+    "thresholds"
+  ],
+  "oneOf": [
+    {"required": ["hmac_key"]},
+    {"required": ["ed25519_sk"]}
+  ],
+  "additionalProperties": false
+}
