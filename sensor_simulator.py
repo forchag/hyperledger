@@ -66,6 +66,13 @@ DEFAULT_SENSORS = ["dht22", "light", "ph", "soil", "water"]
 # instances do not collide.  Each device gets a small file containing the last
 # sequence number that was transmitted.
 STATE_DIR = Path(os.environ.get("SIMULATOR_STATE_DIR", "simulator_state"))
+# Allow the simulator to be toggled on/off without code changes.  When
+# ``SIMULATOR_ENABLED`` is set to ``false`` the process will exit immediately.
+ENABLED = os.environ.get("SIMULATOR_ENABLED", "true").lower() == "true"
+
+# Optional path to a configuration file.  When provided, the simulator will
+# load node definitions from this file instead of prompting interactively.
+CONFIG_PATH = Path(os.environ.get("SIMULATOR_CONFIG", "simulator_config.json"))
 
 # Keep track of devices that have already been announced during this simulator
 # run.  This prevents duplicate registration requests when threads restart or
@@ -479,8 +486,15 @@ def build_mapping(config: dict) -> dict:
 
 
 def main() -> None:
+    if not ENABLED:
+        logger.info("Simulator disabled via SIMULATOR_ENABLED")
+        return
+
+    cfg_path = CONFIG_PATH
     if len(sys.argv) > 1:
         cfg_path = Path(sys.argv[1])
+
+    if cfg_path.exists():
         raw_config = json.loads(cfg_path.read_text())
     else:
         nodes = int(input("How many nodes? "))

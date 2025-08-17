@@ -86,4 +86,10 @@ if [[ -d "${CC_AGRI}" ]]; then
   popd >/dev/null
 fi
 
+# ---- Optional simulator container ----
+if [[ "${SIMULATOR_ENABLED:-}" == "true" ]]; then
+  echo "🔌 Starting simulator container..."
+  docker compose -f "${REPO_ROOT}/docker-compose-simulator.yaml" --profile simulator up -d
+fi
+
 echo "✅ Fabric test network started with chaincode."

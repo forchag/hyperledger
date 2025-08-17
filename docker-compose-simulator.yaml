@@ -1,0 +1,19 @@
+version: '3.7'
+
+services:
+  simulator:
+    build:
+      context: .
+      dockerfile: Dockerfile.simulator
+    environment:
+      - SIMULATOR_ENABLED=${SIMULATOR_ENABLED:-true}
+      - SIMULATOR_CONFIG=/config/simulator_config.json
+    volumes:
+      - simulator_state:/simulator/simulator_state
+      - ./simulator_config.json:/config/simulator_config.json:ro
+    restart: unless-stopped
+    profiles:
+      - simulator
+
+volumes:
+  simulator_state:
