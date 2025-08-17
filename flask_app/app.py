@@ -9,18 +9,29 @@ use ``TraceabilityLedger`` so the application aligns with the current
 traceability implementation.
 """
 
-from flask import Flask, request, jsonify, render_template_string, make_response
+from flask import Flask, request, jsonify, render_template_string, make_response, Response
 import json
 import base64
 from datetime import datetime
 import subprocess
 import shutil
 import hashlib
+import os
+import hmac
+import logging
 from pathlib import Path
 import io
 import sys
 import time
 import re
+from prometheus_client import (
+    Counter,
+    Histogram,
+    Gauge,
+    generate_latest,
+    CONTENT_TYPE_LATEST,
+    CollectorRegistry,
+)
 
 # Ensure the project root is on the module search path so local modules
 # such as ``incident_responder`` can be imported when running this file
@@ -56,6 +67,24 @@ from identity_enrollment import enroll_identity
 from channel_block_retrieval import fetch_channel_block
 
 app = Flask(__name__)
+
+# Shared secret for simulator payload signatures
+HMAC_KEY = os.environ.get("HMAC_KEY", "").encode()
+
+# Prometheus metrics
+REGISTRY = CollectorRegistry()
+REQUESTS = Counter(
+    "gateway_requests_total", "Sensor requests", ["result"], registry=REGISTRY
+)
+COMMIT_LATENCY = Histogram(
+    "gateway_commit_latency_seconds", "Latency to commit sensor data", registry=REGISTRY
+)
+BACKLOG_GAUGE = Gauge(
+    "gateway_backlog_depth", "Total backlog records", registry=REGISTRY
+)
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("gateway")
 
 # Track whether the Fabric network has been started
 BLOCKCHAIN_STARTED = False
@@ -762,12 +791,31 @@ def upload_file():
 
 @app.route("/register", methods=["POST"])
 def register():
-    data = request.get_json()
+    raw = request.get_data()
+    if HMAC_KEY:
+        if not request.environ.get("SSL_CLIENT_CERT"):
+            REQUESTS.labels("unauthenticated").inc()
+            return "client certificate required", 403
+        sig = request.headers.get("X-Payload-Signature", "")
+        expected = hmac.new(HMAC_KEY, raw, hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected, sig):
+            REQUESTS.labels("bad_signature").inc()
+            return "invalid signature", 401
+    data = json.loads(raw.decode() or "{}")
     if not data or "id" not in data or "owner" not in data:
+        REQUESTS.labels("bad_request").inc()
         return "Invalid JSON", 400
     if data["id"] not in list_devices():
         register_device(data["id"], data["owner"])
         check_and_start_blockchain()
+    REQUESTS.labels("success").inc()
+    logger.info(
+        json.dumps({
+            "event": "registered",
+            "device_id": data.get("id"),
+            "owner": data.get("owner"),
+        })
+    )
     return "registered"
 
 
@@ -974,34 +1022,86 @@ def verify_data():
 @app.route("/backlog")
 def backlog_stats():
     """Expose counts of buffered readings per device."""
-    return jsonify(hlf_client.get_backlog_stats())
+    stats = hlf_client.get_backlog_stats()
+    BACKLOG_GAUGE.set(sum(stats.values()))
+    return jsonify(stats)
+
+
+@app.route("/metrics")
+def metrics():
+    """Prometheus metrics endpoint."""
+    return Response(generate_latest(REGISTRY), mimetype=CONTENT_TYPE_LATEST)
 
 
 @app.route("/sensor", methods=["POST"])
 def record_sensor():
-    if request.is_json:
-        data = request.get_json()
-    else:
-        data = request.form.to_dict()
-    if not data:
+    raw = request.get_data()
+    if HMAC_KEY:
+        if not request.environ.get("SSL_CLIENT_CERT"):
+            REQUESTS.labels("unauthenticated").inc()
+            return "client certificate required", 403
+        sig = request.headers.get("X-Payload-Signature", "")
+        expected = hmac.new(HMAC_KEY, raw, hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected, sig):
+            REQUESTS.labels("bad_signature").inc()
+            return "invalid signature", 401
+
+    try:
+        data = json.loads(raw.decode() or "{}")
+    except Exception:
+        REQUESTS.labels("bad_request").inc()
         return "Invalid payload", 400
+
     data["node_ip"] = request.remote_addr
     if data.get("id") and data["id"] not in list_devices():
         register_device(data["id"], data["node_ip"])
         check_and_start_blockchain()
     data["timestamp"] = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
     seq = int(data.get("seq", 0))
-    record_sensor_data(
-        data.get("id", "unknown"),
-        seq,
-        float(data.get("temperature", 0)),
-        float(data.get("humidity", 0)),
-        float(data.get("soil_moisture", 0)),
-        float(data.get("ph", 0)),
-        float(data.get("light", 0)),
-        float(data.get("water_level", 0)),
-        data["timestamp"],
-        data,
+    start = time.time()
+    try:
+        record_sensor_data(
+            data.get("id", "unknown"),
+            seq,
+            float(data.get("temperature", 0)),
+            float(data.get("humidity", 0)),
+            float(data.get("soil_moisture", 0)),
+            float(data.get("ph", 0)),
+            float(data.get("light", 0)),
+            float(data.get("water_level", 0)),
+            data["timestamp"],
+            data,
+        )
+        REQUESTS.labels("success").inc()
+    except Exception as exc:
+        if "exists" in str(exc):
+            REQUESTS.labels("duplicate").inc()
+        else:
+            REQUESTS.labels("error").inc()
+        logger.error(
+            json.dumps(
+                {
+                    "event": "error",
+                    "tx_id": data.get("tx_id"),
+                    "device_id": data.get("id"),
+                    "seq": seq,
+                    "error": str(exc),
+                }
+            )
+        )
+        return str(exc), 400
+    finally:
+        COMMIT_LATENCY.observe(time.time() - start)
+
+    logger.info(
+        json.dumps(
+            {
+                "event": "stored",
+                "tx_id": data.get("tx_id"),
+                "device_id": data.get("id"),
+                "seq": seq,
+            }
+        )
     )
     return jsonify({"stored": True})
 

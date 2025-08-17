@@ -21,6 +21,7 @@ type SensorData struct {
 	WaterLevel   float64 `json:"water_level"`
 	Timestamp    string  `json:"timestamp"`
 	Payload      string  `json:"payload"`
+	Writer       string  `json:"writer"`
 }
 
 type Device struct {
@@ -79,6 +80,10 @@ func (s *SmartContract) deviceExists(ctx contractapi.TransactionContextInterface
 }
 
 func (s *SmartContract) RecordSensorData(ctx contractapi.TransactionContextInterface, id string, seq int, temperature float64, humidity float64, soilMoisture float64, ph float64, light float64, waterLevel float64, timestamp string, payload string) error {
+	writer, err := ctx.GetClientIdentity().GetMSPID()
+	if err != nil {
+		return err
+	}
 	exists, err := s.deviceExists(ctx, id)
 	if err != nil {
 		return err
@@ -108,6 +113,7 @@ func (s *SmartContract) RecordSensorData(ctx contractapi.TransactionContextInter
 			WaterLevel:   waterLevel,
 			Timestamp:    timestamp,
 			Payload:      payload,
+			Writer:       writer,
 		}
 		incomingBytes, err := json.Marshal(incoming)
 		if err != nil {
@@ -145,6 +151,7 @@ func (s *SmartContract) RecordSensorData(ctx contractapi.TransactionContextInter
 		WaterLevel:   waterLevel,
 		Timestamp:    timestamp,
 		Payload:      payload,
+		Writer:       writer,
 	}
 	bytes, err := json.Marshal(data)
 	if err != nil {
