@@ -43,6 +43,11 @@ DEFAULT_SENSORS = ["dht22", "light", "ph", "soil", "water"]
 # sequence number that was transmitted.
 STATE_DIR = Path(os.environ.get("SIMULATOR_STATE_DIR", "simulator_state"))
 
+# Keep track of devices that have already been announced during this simulator
+# run.  This prevents duplicate registration requests when threads restart or
+# multiple components attempt to announce the same sensor.
+ANNOUNCED = set()
+
 
 def _load_sequence(device_id: str) -> int:
     """Return the next sequence number for ``device_id``.
@@ -145,6 +150,7 @@ def _normalize_config(config: dict) -> dict:
 
     return normalized
 
+
 def _simulate_sensor(sensor_id: str, node_ip: str, gpio_pin: int) -> None:
     """Send periodic fake readings for a single sensor.
 
@@ -156,38 +162,38 @@ def _simulate_sensor(sensor_id: str, node_ip: str, gpio_pin: int) -> None:
     register_url = urljoin(BASE_URL, "/register")
     sensor_url = urljoin(BASE_URL, "/sensor")
 
-    # Register the device with the Flask backend so it appears in the
-    # dashboard immediately. Failures are logged but do not stop the
-    # simulation loop so that transient connectivity issues don't kill
-    # the simulator.
-    try:
-        requests.post(
-            register_url,
-            json={"id": sensor_id, "owner": node_ip},
-            timeout=5,
-            verify=VERIFY,
-        )
-    except SSLError as exc:
-        if VERIFY:
-            # Development setups often rely on self-signed certificates.
-            # Retry the request without TLS verification so the simulator
-            # continues to function without manual configuration.
-            try:
-                requests.post(
-                    register_url,
-                    json={"id": sensor_id, "owner": node_ip},
-                    timeout=5,
-                    verify=False,
-                )
-                print(
-                    f"TLS verification failed for {sensor_id}; proceeding without verification"
-                )
-            except Exception as exc2:
-                print(f"register_device failed for {sensor_id}: {exc2}")
-        else:
+    # Announce the device only once even if the simulator thread restarts.
+    if sensor_id not in ANNOUNCED:
+        try:
+            requests.post(
+                register_url,
+                json={"id": sensor_id, "owner": node_ip},
+                timeout=5,
+                verify=VERIFY,
+            )
+            ANNOUNCED.add(sensor_id)
+        except SSLError as exc:
+            if VERIFY:
+                # Development setups often rely on self-signed certificates.
+                # Retry the request without TLS verification so the simulator
+                # continues to function without manual configuration.
+                try:
+                    requests.post(
+                        register_url,
+                        json={"id": sensor_id, "owner": node_ip},
+                        timeout=5,
+                        verify=False,
+                    )
+                    ANNOUNCED.add(sensor_id)
+                    print(
+                        f"TLS verification failed for {sensor_id}; proceeding without verification"
+                    )
+                except Exception as exc2:
+                    print(f"register_device failed for {sensor_id}: {exc2}")
+            else:
+                print(f"register_device failed for {sensor_id}: {exc}")
+        except Exception as exc:
             print(f"register_device failed for {sensor_id}: {exc}")
-    except Exception as exc:
-        print(f"register_device failed for {sensor_id}: {exc}")
 
     seq = _load_sequence(sensor_id)
 
@@ -274,10 +280,9 @@ def main() -> None:
         nodes = int(input("How many nodes? "))
         raw_config = {"nodes": []}
         for i in range(nodes):
-            sensors = (
-                input(f"Enter sensors for node {i + 1} (comma separated): ")
-                .split(",")
-            )
+            sensors = input(
+                f"Enter sensors for node {i + 1} (comma separated): "
+            ).split(",")
             raw_config["nodes"].append(
                 {
                     "id": f"node{i + 1}",

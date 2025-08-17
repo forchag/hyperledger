@@ -61,6 +61,7 @@ def main():
 
     lora = DummyLoRa() if args.mode in ("lora", "both") else None
     session = requests.Session() if args.mode in ("http", "both") else None
+    seq = 1
 
     while True:
         temp, hum = read_dht22()
@@ -72,6 +73,7 @@ def main():
 
         payload = {
             "id": args.device_id,
+            "seq": seq,
             "temperature": temp,
             "humidity": hum,
             "soil_moisture": soil,
@@ -89,6 +91,7 @@ def main():
         else:
             record_sensor_data(
                 args.device_id,
+                seq,
                 temp,
                 hum,
                 soil,
@@ -112,6 +115,7 @@ def main():
                 except Exception as e:
                     print("HTTP send failed:", e)
 
+        seq += 1
         time.sleep(args.interval)
 
 

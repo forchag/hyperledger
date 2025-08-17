@@ -77,6 +77,7 @@ TRACE_CHAIN.add_nft(
     )
 )
 
+
 @app.before_request
 def log_access():
     """Record basic request info for the access log."""
@@ -552,7 +553,11 @@ def run_system_checks():
 
     # Start network if core containers are not running
     if not _container_running("orderer.example.com"):
-        subprocess.run(["bash", str(start_script)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(
+            ["bash", str(start_script)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
         time.sleep(3)
 
     # Verify container health
@@ -568,7 +573,9 @@ def run_system_checks():
     checks.append({"check": "Peer0.org2 active", "ok": peer2_ok})
     checks.append({"check": "CA org1 reachable", "ok": ca1_ok})
     checks.append({"check": "CA org2 reachable", "ok": ca2_ok})
-    checks.append({"check": "CouchDB instances reachable", "ok": couch0_ok and couch1_ok})
+    checks.append(
+        {"check": "CouchDB instances reachable", "ok": couch0_ok and couch1_ok}
+    )
 
     try:
         ensure_admin_enrollment(net_dir)
@@ -758,8 +765,9 @@ def register():
     data = request.get_json()
     if not data or "id" not in data or "owner" not in data:
         return "Invalid JSON", 400
-    register_device(data["id"], data["owner"])
-    check_and_start_blockchain()
+    if data["id"] not in list_devices():
+        register_device(data["id"], data["owner"])
+        check_and_start_blockchain()
     return "registered"
 
 
@@ -883,10 +891,6 @@ def start_simulation():
     cfg.write_text(json.dumps(config))
     mapping = build_mapping(config)
     _apply_mapping(mapping)
-    for node_id, info in mapping.items():
-        ip = info.get("ip", node_id)
-        for sensor in info.get("sensors", {}):
-            register_device(f"{node_id}_{sensor}", ip)
     script = root / "sensor_simulator.py"
     # Use the current Python executable instead of a hard-coded "python" string
     # to avoid FileNotFoundError on systems where only ``python3`` is installed.
@@ -976,10 +980,14 @@ def record_sensor():
     if not data:
         return "Invalid payload", 400
     data["node_ip"] = request.remote_addr
+    if data.get("id") and data["id"] not in list_devices():
+        register_device(data["id"], data["node_ip"])
+        check_and_start_blockchain()
     data["timestamp"] = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-    js = json.dumps(data).encode("utf-8")
+    seq = int(data.get("seq", 0))
     record_sensor_data(
         data.get("id", "unknown"),
+        seq,
         float(data.get("temperature", 0)),
         float(data.get("humidity", 0)),
         float(data.get("soil_moisture", 0)),
@@ -1098,6 +1106,7 @@ def bootstrap_status():
     if status_file.exists():
         return jsonify(json.loads(status_file.read_text()))
     return jsonify({"ready": False})
+
 
 @app.route("/verify-product/<int:nft_id>")
 def verify_product_route(nft_id):

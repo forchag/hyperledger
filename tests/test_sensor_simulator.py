@@ -31,7 +31,10 @@ def test_build_mapping_basic_multiple_nodes():
     }
     mapping = build_mapping(config)
     assert mapping["node2"]["ip"] == "10.0.0.2"
-    assert mapping["node1"]["sensors"] == {"temp": GPIO_PINS[0], "humidity": GPIO_PINS[1]}
+    assert mapping["node1"]["sensors"] == {
+        "temp": GPIO_PINS[0],
+        "humidity": GPIO_PINS[1],
+    }
     assert mapping["node2"]["sensors"] == {"ph": GPIO_PINS[0]}
     assert mapping["node1"]["ip"].startswith("192.168.0.")
 
@@ -116,13 +119,25 @@ def test_simulation_updates_app_and_registers_devices(monkeypatch):
     client = app_mod.app.test_client()
     resp = client.post(
         "/simulate",
-        json={"nodes": [{"id": "node1"}, {"id": "node2", "ip": "10.0.0.2", "sensors": ["ph"]}]},
+        json={
+            "nodes": [
+                {"id": "node1"},
+                {"id": "node2", "ip": "10.0.0.2", "sensors": ["ph"]},
+            ]
+        },
     )
     assert resp.status_code == 200
     mapping = resp.get_json()["mapping"]
     assert app_mod.NODE_MAP == mapping
 
     expected = {f"{n}_{s}" for n, info in mapping.items() for s in info["sensors"]}
+    # Devices are now registered lazily when they first announce. Mimic that by
+    # calling /register for each expected sensor.
+    for node_id, info in mapping.items():
+        ip = info["ip"]
+        for sensor in info["sensors"]:
+            client.post("/register", json={"id": f"{node_id}_{sensor}", "owner": ip})
+
     assert set(hlf_client.DEVICES) >= expected
     assert set(hlf_client.ACTIVE_DEVICES) >= expected
 

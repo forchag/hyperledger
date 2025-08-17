@@ -43,8 +43,10 @@ def monitor():
                     "timestamp",
                 )
             ):
+                seq = int(data.get("seq", 0))
                 record_sensor_data(
                     data["id"],
+                    seq,
                     float(data["temperature"]),
                     float(data["humidity"]),
                     float(data["soil_moisture"]),
