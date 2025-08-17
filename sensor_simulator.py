@@ -5,6 +5,7 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
+import math
 
 import os
 from urllib.parse import urljoin
@@ -47,6 +48,91 @@ STATE_DIR = Path(os.environ.get("SIMULATOR_STATE_DIR", "simulator_state"))
 # run.  This prevents duplicate registration requests when threads restart or
 # multiple components attempt to announce the same sensor.
 ANNOUNCED = set()
+
+
+# Optional per-sensor profile configuration.  Profiles allow the simulator to
+# generate more realistic time series data by combining a baseline, variance,
+# diurnal drift, and occasional spikes.  Parameters can be adjusted at runtime
+# by editing ``sensor_profiles.json`` (or YAML) without restarting the
+# simulator.
+PROFILE_PATH = Path(os.environ.get("SENSOR_PROFILE_CONFIG", "sensor_profiles.json"))
+_PROFILE_CACHE = {}
+_PROFILE_MTIME = 0.0
+
+# Default metric characteristics used when a sensor lacks explicit profile
+# configuration.  Values roughly mirror the ranges previously produced by the
+# flat ``random.uniform`` calls but allow drift and spikes to be layered on
+# top.
+DEFAULT_METRICS = {
+    "temperature": {"baseline": 22, "variance": 5, "drift": 3},
+    "humidity": {"baseline": 60, "variance": 10, "drift": 5},
+    "soil_moisture": {"baseline": 40, "variance": 5, "drift": 2},
+    "ph": {"baseline": 6.5, "variance": 0.3},
+    "light": {"baseline": 500, "variance": 100, "drift": 200},
+    "water_level": {"baseline": 50, "variance": 10},
+}
+
+
+def _load_profiles() -> None:
+    """Reload the profile configuration if the file has changed."""
+
+    global _PROFILE_CACHE, _PROFILE_MTIME
+    try:
+        mtime = PROFILE_PATH.stat().st_mtime
+    except FileNotFoundError:
+        _PROFILE_CACHE = {}
+        _PROFILE_MTIME = 0.0
+        return
+    if mtime == _PROFILE_MTIME:
+        return
+    try:
+        if PROFILE_PATH.suffix in (".yaml", ".yml"):
+            import yaml  # type: ignore
+
+            _PROFILE_CACHE = yaml.safe_load(PROFILE_PATH.read_text()) or {}
+        else:
+            _PROFILE_CACHE = json.loads(PROFILE_PATH.read_text())
+    except Exception as exc:  # pragma: no cover - log and fall back to defaults
+        print(f"Failed to load profile config: {exc}")
+        _PROFILE_CACHE = {}
+    _PROFILE_MTIME = mtime
+
+
+def _profile_for(sensor_id: str) -> dict:
+    """Return the profile dictionary for ``sensor_id`` if present."""
+
+    _load_profiles()
+    prof = _PROFILE_CACHE.get(sensor_id)
+    if not prof and "_" in sensor_id:
+        # Allow profiles keyed by sensor type (after the first underscore)
+        prof = _PROFILE_CACHE.get(sensor_id.split("_", 1)[1])
+    return prof or {}
+
+
+def _generate_value(cfg: dict, seq: int, mode: str) -> float:
+    """Generate a reading using ``cfg`` profile and ``mode`` behaviour."""
+
+    baseline = cfg.get("baseline", 0)
+    variance = cfg.get("variance", 0)
+    drift_amp = cfg.get("drift", 0)
+    now = time.time() % 86400
+    drift = drift_amp * math.sin(2 * math.pi * now / 86400)
+    val = baseline + drift + random.uniform(-variance, variance)
+    spike = cfg.get("spike", {})
+    magnitude = spike.get("magnitude", 0)
+    probability = spike.get("probability", 0)
+    interval = spike.get("interval")
+    if mode == "bursty":
+        if random.random() < probability:
+            val += magnitude
+    elif mode == "scheduled":
+        if interval and seq % int(interval) == 0:
+            val += magnitude
+    elif mode == "stress":
+        val += random.uniform(-variance, variance)
+        if random.random() < max(probability, 0.1):
+            val += magnitude
+    return round(val, 2)
 
 
 def _load_sequence(device_id: str) -> int:
@@ -198,12 +284,16 @@ def _simulate_sensor(sensor_id: str, node_ip: str, gpio_pin: int) -> None:
     seq = _load_sequence(sensor_id)
 
     while True:
-        temperature = round(random.uniform(10, 35), 2)
-        humidity = round(random.uniform(30, 90), 2)
-        soil_moisture = round(random.uniform(20, 80), 2)
-        ph = round(random.uniform(5.5, 7.5), 2)
-        light = round(random.uniform(200, 800), 2)
-        water_level = round(random.uniform(0, 100), 2)
+        profile = _profile_for(sensor_id)
+        mode = profile.get("mode", "steady")
+        metrics = profile.get("metrics", {})
+
+        temperature = _generate_value(metrics.get("temperature", DEFAULT_METRICS["temperature"]), seq, mode)
+        humidity = _generate_value(metrics.get("humidity", DEFAULT_METRICS["humidity"]), seq, mode)
+        soil_moisture = _generate_value(metrics.get("soil_moisture", DEFAULT_METRICS["soil_moisture"]), seq, mode)
+        ph = _generate_value(metrics.get("ph", DEFAULT_METRICS["ph"]), seq, mode)
+        light = _generate_value(metrics.get("light", DEFAULT_METRICS["light"]), seq, mode)
+        water_level = _generate_value(metrics.get("water_level", DEFAULT_METRICS["water_level"]), seq, mode)
         ts = datetime.utcnow().isoformat()
         payload = {
             "id": sensor_id,
@@ -220,6 +310,7 @@ def _simulate_sensor(sensor_id: str, node_ip: str, gpio_pin: int) -> None:
             "simulated": True,
         }
 
+        submit_dt = datetime.utcnow()
         try:
             requests.post(sensor_url, json=payload, timeout=5, verify=VERIFY)
         except SSLError as exc:
@@ -235,6 +326,43 @@ def _simulate_sensor(sensor_id: str, node_ip: str, gpio_pin: int) -> None:
                 print(f"record_sensor_data failed for {sensor_id}: {exc}")
         except Exception as exc:
             print(f"record_sensor_data failed for {sensor_id}: {exc}")
+
+        commit_record = None
+        for _ in range(10):
+            try:
+                resp = requests.get(
+                    urljoin(BASE_URL, "/latest-readings"), timeout=5, verify=VERIFY
+                )
+                latest = resp.json()
+                rec = latest.get(sensor_id)
+                if rec and int(rec.get("seq", 0)) == seq:
+                    commit_record = rec
+                    break
+            except Exception:
+                pass
+            time.sleep(0.5)
+
+        if commit_record:
+            commit_ts = commit_record.get("timestamp")
+            try:
+                info = requests.get(
+                    urljoin(BASE_URL, "/blockchain-info"), timeout=5, verify=VERIFY
+                ).json()
+                height = info.get("height")
+            except Exception:
+                height = None
+            try:
+                commit_dt = datetime.fromisoformat(commit_ts.replace("Z", "+00:00"))
+                latency = (commit_dt - submit_dt).total_seconds()
+            except Exception:
+                latency = None
+            latency_s = f"{latency:.3f}s" if latency is not None else "unknown"
+            print(
+                f"[latency] {sensor_id} seq {seq} submit {submit_dt.isoformat()} "
+                f"commit {commit_ts} height {height} latency {latency_s}"
+            )
+        else:
+            print(f"[latency] {sensor_id} seq {seq} commit not confirmed")
 
         _save_sequence(sensor_id, seq)
         seq += 1
