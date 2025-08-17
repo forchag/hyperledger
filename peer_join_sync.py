@@ -118,6 +118,63 @@ def wait_for_sync(
         time.sleep(interval)
 
 
+def activate_committed_chaincodes(channel: str, ready_flag: Path | str = "peer.ready") -> list[str]:
+    """Launch runtimes for committed chaincodes and run basic health checks.
+
+    The peer's lifecycle data is queried to discover which chaincodes are
+    already committed on ``channel``. For each chaincode found a simple query is
+    executed which causes the peer to start the chaincode container locally.
+    The query acts as a lightweight health check: if it fails, a
+    ``CalledProcessError`` is raised.  When all checks pass ``ready_flag`` is
+    touched to signal that the peer can safely endorse and submit
+    transactions.
+
+    Parameters
+    ----------
+    channel:
+        Channel name to inspect.
+    ready_flag:
+        Path of a file that will be created once the peer is ready.
+
+    Returns
+    -------
+    list[str]
+        Names of the chaincodes that were activated.
+    """
+
+    result = _run(
+        ["peer", "lifecycle", "chaincode", "querycommitted", "--channelID", channel]
+    )
+    names: list[str] = []
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if line.startswith("Name:"):
+            # Line format: "Name: sensor, Version: 1, Sequence: 1, ..."
+            names.append(line.split("Name:", 1)[1].split(",", 1)[0].strip())
+
+    for name in names:
+        # Trigger the chaincode container and verify responsiveness. Using a
+        # health check function name keeps the call generic; chaincode that does
+        # not implement it will cause this step to fail, surfacing deployment
+        # issues early.
+        _run(
+            [
+                "peer",
+                "chaincode",
+                "query",
+                "-C",
+                channel,
+                "-n",
+                name,
+                "-c",
+                '{"Args":["__health"]}',
+            ]
+        )
+
+    Path(ready_flag).touch()
+    return names
+
+
 def join_and_sync(
     channel: str,
     orderer: str,
@@ -126,11 +183,18 @@ def join_and_sync(
     *,
     interval: float = 5.0,
     timeout: float = 300.0,
+    ready_flag: Path | str = "peer.ready",
 ) -> None:
-    """Fetch the channel block, join the peer, and wait for ledger sync."""
+    """Fetch the channel block, join the peer, and wait for ledger sync.
+
+    Once synchronization completes, chaincodes already committed to the channel
+    are activated locally and basic health checks are performed.  The peer is
+    marked ready by touching ``ready_flag`` only after these checks pass.
+    """
     fetch_channel_block(channel, orderer, ca_cert, block_path)
     join_channel(block_path)
     wait_for_sync(channel, orderer, ca_cert, interval=interval, timeout=timeout)
+    activate_committed_chaincodes(channel, ready_flag)
 
 
 if __name__ == "__main__":

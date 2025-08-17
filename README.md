@@ -234,6 +234,13 @@ client traffic until synchronization completes:
 python peer_join_sync.py mychannel orderer.example.com:7050 tls/ca.crt mychannel.block
 ```
 
+After the peer's ledger catches up, the utility inspects the channel for any
+previously committed chaincodes. Each detected chaincode is queried once which
+launches its runtime container and serves as a lightweight health check. The
+peer is only marked ready for endorsements after all chaincodes respond,
+ensuring existing lifecycle definitions and endorsement policies remain
+unchanged.
+
 ## Blockchain design
 
 This project uses **Hyperledger Fabric**, a permissioned blockchain platform. Peers
