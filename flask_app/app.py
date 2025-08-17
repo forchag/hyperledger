@@ -1039,7 +1039,12 @@ def explorer_page():
 
 @app.route("/blockchain-info")
 def blockchain_info():
-    return jsonify({"events": get_block_events()})
+    # Expose both the ledger height and recent events so clients can measure
+    # commit latency and correlate writes with the underlying blockchain
+    # state.
+    info = hlf_client.query_blockchain_info()
+    info["events"] = get_block_events()
+    return jsonify(info)
 
 
 @app.route("/devices")

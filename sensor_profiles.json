@@ -1,0 +1,42 @@
+{
+  "dht22": {
+    "mode": "steady",
+    "metrics": {
+      "temperature": {"baseline": 24, "variance": 1, "drift": 4},
+      "humidity": {"baseline": 55, "variance": 3, "drift": 10}
+    }
+  },
+  "soil": {
+    "mode": "scheduled",
+    "metrics": {
+      "soil_moisture": {
+        "baseline": 35,
+        "variance": 5,
+        "drift": 5,
+        "spike": {"magnitude": 20, "interval": 12}
+      }
+    }
+  },
+  "water": {
+    "mode": "bursty",
+    "metrics": {
+      "water_level": {
+        "baseline": 50,
+        "variance": 5,
+        "spike": {"magnitude": 30, "probability": 0.3}
+      }
+    }
+  },
+  "light": {
+    "mode": "stress",
+    "metrics": {
+      "light": {"baseline": 400, "variance": 150, "drift": 300}
+    }
+  },
+  "ph": {
+    "mode": "steady",
+    "metrics": {
+      "ph": {"baseline": 6.5, "variance": 0.2}
+    }
+  }
+}

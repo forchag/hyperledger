@@ -406,7 +406,12 @@ def get_state_on(date: str):
 def query_blockchain_info():
     """Return basic ledger info such as height and current block hash."""
     print("[HLF] query blockchain info")
-    return {"height": 0, "current_hash": "0x0"}
+    # ``CURRENT_BLOCK`` tracks the number of commits performed by the in-memory
+    # ledger used in the test environment.  Exposing it here allows external
+    # callers such as the sensor simulator to retrieve a monotonically
+    # increasing ledger height similar to ``peer channel getinfo`` in a real
+    # Fabric network.
+    return {"height": CURRENT_BLOCK, "current_hash": "0x0"}
 
 
 def get_block(block_number):
