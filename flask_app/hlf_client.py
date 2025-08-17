@@ -4,6 +4,7 @@ from datetime import datetime
 import base64
 import json
 import zlib
+import os
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives import serialization
@@ -38,6 +39,15 @@ ATTESTATIONS = []
 # Blockchain event log and simple block counter for demo purposes
 BLOCK_EVENTS = []
 CURRENT_BLOCK = 0
+
+# Block creation policy
+BLOCK_INTERVAL_MINUTES = int(os.getenv("BLOCK_INTERVAL_MINUTES", "60"))
+BLOCK_INTERVAL_MINUTES = max(30, min(120, BLOCK_INTERVAL_MINUTES))
+SOIL_MOISTURE_THRESHOLD = float(os.getenv("SOIL_MOISTURE_THRESHOLD", "20"))
+PH_CHANGE_THRESHOLD = float(os.getenv("PH_CHANGE_THRESHOLD", "1.0"))
+WATER_LEVEL_THRESHOLD = float(os.getenv("WATER_LEVEL_THRESHOLD", "10"))
+LAST_BLOCK_TIME = 0.0
+LAST_PH: Dict[str, float] = {}
 
 # Directory for persisting readings when the network is unavailable
 BACKLOG_DIR = Path(__file__).resolve().parents[1] / "backlog"
@@ -118,6 +128,30 @@ def get_block_events():
     return BLOCK_EVENTS
 
 
+def _should_create_block(sensor_id, soil_moisture, ph, water_level) -> bool:
+    """Determine if a new block should be created.
+
+    A block is cut if either the configured time interval has elapsed or an
+    event trigger is observed (low soil moisture, sudden pH shift or low water
+    level).
+    """
+    global LAST_BLOCK_TIME
+    now = time.time()
+    interval = BLOCK_INTERVAL_MINUTES * 60
+    create = False
+    if LAST_BLOCK_TIME == 0.0 or now - LAST_BLOCK_TIME >= interval:
+        create = True
+    if soil_moisture < SOIL_MOISTURE_THRESHOLD or water_level < WATER_LEVEL_THRESHOLD:
+        create = True
+    last_ph = LAST_PH.get(sensor_id)
+    if last_ph is not None and abs(ph - last_ph) >= PH_CHANGE_THRESHOLD:
+        create = True
+    LAST_PH[sensor_id] = ph
+    if create:
+        LAST_BLOCK_TIME = now
+    return create
+
+
 def _record_sensor_data_direct(
     id,
     seq,
@@ -132,10 +166,11 @@ def _record_sensor_data_direct(
 ):
     """Internal synchronous implementation of the sensor data write."""
     global CURRENT_BLOCK
-    CURRENT_BLOCK += 1
-    log_block_event(f"Creating block {CURRENT_BLOCK}")
-    log_block_event(f"Hashing block {CURRENT_BLOCK}")
-    log_block_event(f"Saving block {CURRENT_BLOCK}")
+    if _should_create_block(id, soil_moisture, ph, water_level):
+        CURRENT_BLOCK += 1
+        log_block_event(f"Creating block {CURRENT_BLOCK}")
+        log_block_event(f"Hashing block {CURRENT_BLOCK}")
+        log_block_event(f"Saving block {CURRENT_BLOCK}")
     # Reject out-of-order sequences and allow idempotent re-submissions of the
     # same payload.  Each sensor keeps its own sequence counter so readings can
     # be uniquely identified.

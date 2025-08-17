@@ -11,6 +11,12 @@ import requests
 from flask_app.hlf_client import record_sensor_data
 
 
+SOIL_MOISTURE_THRESHOLD = 20.0
+PH_LOW = 5.5
+PH_HIGH = 7.5
+WATER_LEVEL_THRESHOLD = 10.0
+
+
 # Importing the sx127x driver would require hardware. We keep a stub.
 class DummyLoRa:
     def send(self, payload: bytes):
@@ -40,11 +46,34 @@ def read_water_level():
     return random.uniform(0.0, 100.0)
 
 
+def should_transmit(last_report: float, now: float, interval_min: int, soil: float, ph: float, water: float) -> bool:
+    """Return True if a reading should be sent.
+
+    A transmission occurs either when the reporting interval has elapsed or
+    when any sensor value crosses its anomaly threshold.
+    """
+
+    interval_elapsed = now - last_report >= interval_min * 60
+    anomaly = (
+        soil < SOIL_MOISTURE_THRESHOLD
+        or ph < PH_LOW
+        or ph > PH_HIGH
+        or water < WATER_LEVEL_THRESHOLD
+    )
+    return interval_elapsed or anomaly
+
+
 def main():
     parser = argparse.ArgumentParser(description="Sensor node")
     parser.add_argument("device_id")
     parser.add_argument(
-        "--interval", type=int, default=60, help="seconds between measurements"
+        "--sample-interval", type=int, default=60, help="seconds between measurements"
+    )
+    parser.add_argument(
+        "--report-interval",
+        type=int,
+        default=30,
+        help="minutes between periodic reports",
     )
     parser.add_argument(
         "--mode",
@@ -62,6 +91,7 @@ def main():
     lora = DummyLoRa() if args.mode in ("lora", "both") else None
     session = requests.Session() if args.mode in ("http", "both") else None
     seq = 1
+    last_report = 0.0
 
     while True:
         temp, hum = read_dht22()
@@ -83,40 +113,44 @@ def main():
             "timestamp": timestamp,
         }
 
-        if args.mode == "http":
-            try:
-                session.post(args.endpoint, json=payload, timeout=5)
-            except Exception as e:
-                print("HTTP send failed:", e)
-        else:
-            record_sensor_data(
-                args.device_id,
-                seq,
-                temp,
-                hum,
-                soil,
-                ph,
-                light,
-                water,
-                timestamp,
-                payload,
-            )
-            data = json.dumps(payload).encode("utf-8")
-
-            if lora:
-                try:
-                    lora.send(data)
-                except Exception as e:
-                    print("LoRa send failed:", e)
-
-            if args.mode == "both" and session:
+        now = time.time()
+        if should_transmit(last_report, now, args.report_interval, soil, ph, water):
+            if args.mode == "http":
                 try:
                     session.post(args.endpoint, json=payload, timeout=5)
                 except Exception as e:
                     print("HTTP send failed:", e)
+            else:
+                record_sensor_data(
+                    args.device_id,
+                    seq,
+                    temp,
+                    hum,
+                    soil,
+                    ph,
+                    light,
+                    water,
+                    timestamp,
+                    payload,
+                )
+                data = json.dumps(payload).encode("utf-8")
 
-        seq += 1
-        time.sleep(args.interval)
+                if lora:
+                    try:
+                        lora.send(data)
+                    except Exception as e:
+                        print("LoRa send failed:", e)
+
+                if args.mode == "both" and session:
+                    try:
+                        session.post(args.endpoint, json=payload, timeout=5)
+                    except Exception as e:
+                        print("HTTP send failed:", e)
+
+            last_report = now
+            seq += 1
+
+        time.sleep(args.sample_interval)
 
 
 if __name__ == "__main__":

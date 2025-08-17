@@ -2,64 +2,68 @@
 
 ```mermaid
 graph LR
-  %% ===== SENSOR INPUT =====
-  S1[Soil Moisture Sensor] -->|Analog| SAM[Sampling]
-  S2[Temperature Sensor] -->|I2C| SAM
-  S3[NPK Sensor] -->|UART| SAM
+  subgraph ESP[ESP32 Smart Hub]
+    %% ===== SENSOR INPUT =====
+    S1[Soil Moisture Sensor] -->|Analog| SAM[Sampling]
+    S2[Temperature Sensor] -->|I2C| SAM
+    S3[NPK Sensor] -->|UART| SAM
 
-  subgraph SAM[Sampling Module]
-    direction TB
-    ADC[10-bit ADC] --> BUF[Sample Buffer]
-    BUF -->|180 samples| WIN[30-min Window]
-    style SAM fill:#e6f7ff,stroke:#91d5ff
+    subgraph SAM[Sampling Module]
+      direction TB
+      ADC[10-bit ADC] --> BUF[Sample Buffer]
+      BUF -->|180 samples| WIN[30-min Window]
+      style SAM fill:#e6f7ff,stroke:#91d5ff
+    end
+
+    %% ===== FEATURE EXTRACTION =====
+    WIN --> FE[Feature Extractor]
+
+    subgraph FE[Feature Extractor]
+      direction LR
+      MIN["min = np.min()"]:::code
+      MAX["max = np.max()"]:::code
+      MEAN["mean = np.mean()"]:::code
+      STD["std = np.std()"]:::code
+      P90["p90 = np.percentile(90)"]:::code
+      ANOM["anomaly = 1 if std > 15"]:::code
+      style FE fill:#f6ffed,stroke:#b7eb8f
+    end
+
+    %% ===== CRT COMPRESSION =====
+    FE --> CRT[CRT Compressor]
+
+    subgraph CRT[CRT Compressor]
+      direction TB
+      R1["res₁ = (mean × 100) % 65521"]:::code
+      R2["res₂ = (std × 100) % 65519"]:::code
+      R3["res₃ = (max×10000 + min) % 65497"]:::code
+      style CRT fill:#ffefe6,stroke:#ffd8bf
+    end
+
+    %% ===== RSA SIGNING =====
+    CRT --> SIG[RSA-CRT Signer]
+
+    subgraph SIG[RSA-CRT Signer]
+      direction LR
+      HASH["digest = SHA-256(residues)"]:::code
+      ENC["sig = Modular Exponentiation"]:::code
+      style SIG fill:#f9f0ff,stroke:#d3adf7
+    end
+
+    %% ===== TRANSACTION BUILDING =====
+    SIG --> TX[Transaction Builder]
+
+    subgraph TX[Transaction Builder]
+      direction TB
+      STRUCT["AgriBlock:\n- sensor_id: 2B\n- timestamp: 4B\n- residues: 6B\n- signature: 33B\n- anomaly: 1B\nTotal: 46B"]:::code
+      style TX fill:#e0f0ff,stroke:#adc6ff
+    end
   end
 
-  %% ===== FEATURE EXTRACTION =====
-  WIN --> FE[Feature Extractor]
-  
-  subgraph FE[Feature Extractor]
-    direction LR
-    MIN["min = np.min()"]:::code
-    MAX["max = np.max()"]:::code
-    MEAN["mean = np.mean()"]:::code
-    STD["std = np.std()"]:::code
-    P90["p90 = np.percentile(90)"]:::code
-    ANOM["anomaly = 1 if std > 15"]:::code
-    style FE fill:#f6ffed,stroke:#b7eb8f
-  end
-
-  %% ===== CRT COMPRESSION =====
-  FE --> CRT[CRT Compressor]
-  
-  subgraph CRT[CRT Compressor]
-    direction TB
-    R1["res₁ = (mean × 100) % 65521"]:::code
-    R2["res₂ = (std × 100) % 65519"]:::code
-    R3["res₃ = (max×10000 + min) % 65497"]:::code
-    style CRT fill:#ffefe6,stroke:#ffd8bf
-  end
-
-  %% ===== RSA SIGNING =====
-  CRT --> SIG[RSA-CRT Signer]
-  
-  subgraph SIG[RSA-CRT Signer]
-    direction LR
-    HASH["digest = SHA-256(residues)"]:::code
-    ENC["sig = Modular Exponentiation"]:::code
-    style SIG fill:#f9f0ff,stroke:#d3adf7
-  end
-
-  %% ===== TRANSACTION BUILDING =====
-  SIG --> TX[Transaction Builder]
-  
-  subgraph TX[Transaction Builder]
-    direction TB
-    STRUCT["AgriBlock:\n- sensor_id: 2B\n- timestamp: 4B\n- residues: 6B\n- signature: 33B\n- anomaly: 1B\nTotal: 46B"]:::code
-    style TX fill:#e0f0ff,stroke:#adc6ff
-  end
+  TX --> GW[Gateway RPi]
 
   %% ===== BLOCKCHAIN COMMIT =====
-  TX --> BC[Blockchain Commit]
+  GW --> BC[Blockchain Commit]
   
   subgraph BC[Hyperledger Fabric]
     direction LR
@@ -69,11 +73,12 @@ graph LR
   end
 
   %% ===== DATA FLOW ANNOTATIONS =====
+  ANNOT0[["ESP32:\n- Local thresholds\n- 30–120 min reports\n- Instant alerts"]] --> ESP
   ANNOT1[["Sampling:\n- 10s intervals\n- 180 samples/window\n- 1440 bytes raw"]] --> SAM
   ANNOT2[["Feature Extraction:\n- 5 features\n- 48 bytes output\n- 96.7% reduction"]] --> FE
   ANNOT3[["CRT Compression:\n- 3 residues\n- 6 bytes\n- 87.5% reduction"]] --> CRT
   ANNOT4[["RSA-CRT:\n- 2048-bit keys\n- 33-byte signature\n- 78 ms signing"]] --> SIG
-  ANNOT5[["Blockchain:\n- 5-sec blocks\n- 225 KB/day storage"]] --> BC
+  ANNOT5[["Blockchain:\n- 30–120 min blocks\n- Event-triggered\n- Reduced storage"]] --> BC
 
   %% ===== PERFORMANCE METRICS =====
   PERF[["Performance (RPi 4B):\n- Feature Extract: 12 ms\n- CRT Compress: 0.15 ms\n- RSA Sign: 78 ms\n- Total: 90.15 ms"]] --> TX

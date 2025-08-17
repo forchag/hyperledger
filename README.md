@@ -80,41 +80,44 @@ heartbeat packets over LoRa using the `pySX127x` library. The companion
 `network_monitor.py` listens for these heartbeats, logs them on the blockchain
 and prints a list of discovered nodes every minute.
 
-`sensor_node.py` polls a DHT22, soil moisture, pH, light and water level sensor
-every few seconds. By default it sends the readings to the Flask API over HTTP
-but it can also transmit them over LoRa or use both channels for redundancy via
-the `--mode` option. These scripts are stubs and can be run on a Raspberry Pi
-with appropriate radio modules attached.
-The chaincode now records all of these metrics so that agronomists can
-track detailed conditions directly on the ledger.
+ESP32 boards now act as smart sensor hubs. Each ESP32 connects to a DHT22, pH
+probe, soil moisture, light and water level sensor. The microcontroller filters
+noise and applies simple thresholds locally. It forwards data via LoRa to the
+nearest Raspberry Pi gateway only when necessary: normal reports every 30–120
+minutes or immediate alerts when thresholds are crossed. This hierarchy reduces
+redundant traffic and keeps the blockchain lean.
 
-## Connecting sensors to a Raspberry Pi
+`sensor_node.py` emulates this behaviour. It polls sensors, applies threshold
+logic and demonstrates both periodic and event-triggered transmissions. By
+default it sends readings to the Flask API over HTTP but it can also transmit
+them over LoRa or use both channels for redundancy via the `--mode` option.
+The chaincode records all of these metrics so agronomists can track detailed
+conditions directly on the ledger.
 
-1. **Gather jumper wires and the sensors**
-   Each sensor normally has three pins: power (`VCC`), ground (`GND`) and a data
-   line. Use female‑to‑male jumper wires so they plug directly onto the Pi's
-   GPIO header.
+## Connecting sensors to an ESP32
+
+1. **Gather the ESP32 and sensors**
+   Each sensor typically exposes `VCC`, `GND` and a data line. Female-to-female
+   jumpers let them plug into the microcontroller headers.
 
 2. **Wire the DHT22 temperature and humidity sensor**
-   - Connect `VCC` to pin **1** (5&nbsp;V).
-   - Connect `GND` to pin **6**.
+   - Connect `VCC` to the ESP32's **3V3** pin.
+   - Connect `GND` to **GND**.
    - Connect the data pin to **GPIO&nbsp;4**.
    - Place a 10&nbsp;kΩ resistor between `VCC` and the data pin.
 
 3. **Attach the soil moisture, pH, light and water level sensors**
-   - Use any free 5&nbsp;V and GND pins for power.
-   - Connect the data pins to **GPIO&nbsp;17**, **GPIO&nbsp;18**,
-     **GPIO&nbsp;6** and **GPIO&nbsp;16** respectively.
-   - If a sensor outputs an analog signal, route it through an ADC such as the
-     MCP3008 before connecting it to the GPIO pin.
+   - Power them from any 3V3 and GND pins.
+   - Route analog outputs to **GPIO&nbsp;34**, **GPIO&nbsp;35**,
+     **GPIO&nbsp;32** and **GPIO&nbsp;33** respectively.
 
 4. **Test your wiring**
-   Power on the Pi and run:
+   Power the board and run:
    ```bash
    python sensor_node.py sensor-1
    ```
-   If you see numbers printing every few seconds the sensors are properly
-   connected.
+   If you see readings occasionally printing — more often when values cross
+   thresholds — the sensors are working and the ESP32 is reporting correctly.
 
 ## Running a Fabric network locally
 
@@ -273,15 +276,17 @@ information or verify data integrity.
 
 ### Block characteristics
 
-Blocks in the default test network are cut when either 10 transactions
-accumulate or about two seconds pass.  A block typically stays under
-2&nbsp;MB in size but the absolute maximum is 10&nbsp;MB.  Every
-transaction is hashed with **SHA-256** before inclusion and the block
-header stores the Merkle root of all transaction hashes.  Communication
-between nodes is protected with TLS but the on-disk ledger itself is not
-encrypted.  Because only a small transaction descriptor is stored on the
-ledger, roughly a few hundred sensor events comfortably fit into a
-single block.
+Blocks in the default test network are cut on a much slower cadence. A new
+block is produced roughly every 30&ndash;120 minutes (configurable) or
+immediately when sensor anomalies occur, such as low soil moisture or sudden
+pH changes.  This event-driven policy reduces redundant writes and conserves
+storage. A block typically stays under 2&nbsp;MB in size but the absolute
+maximum is 10&nbsp;MB.  Every transaction is hashed with **SHA-256** before
+inclusion and the block header stores the Merkle root of all transaction
+hashes.  Communication between nodes is protected with TLS but the on-disk
+ledger itself is not encrypted.  Because only a small transaction descriptor is
+stored on the ledger, roughly a few hundred sensor events comfortably fit into
+a single block.
 
 ### Inspecting and verifying blocks
 
