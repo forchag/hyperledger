@@ -221,6 +221,19 @@ The `systemd/fabric-network@.service` unit lets any Linux user launch the Fabric
 
 The unit runs `start_network.sh` from the repository and passes `FABRIC_LEDGER_DIR` (default `~/fabric-ledger`) to persist the ledger. Adjust the directory name or ledger path with `systemctl --user edit` if your layout differs.
 
+### Joining a peer and synchronizing its ledger
+
+New peers can be brought onto the channel using `peer_join_sync.py`. The
+utility fetches the channel's configuration block if needed, issues the
+`peer channel join` command and then compares the peer's ledger height with the
+network height obtained from the orderer. The script only returns once the
+local ledger is fully caught up, letting administrators delay endorsements or
+client traffic until synchronization completes:
+
+```bash
+python peer_join_sync.py mychannel orderer.example.com:7050 tls/ca.crt mychannel.block
+```
+
 ## Blockchain design
 
 This project uses **Hyperledger Fabric**, a permissioned blockchain platform. Peers
