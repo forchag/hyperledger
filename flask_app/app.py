@@ -962,6 +962,18 @@ def simulation_state():
     return jsonify({"mapping": mapping})
 
 
+@app.route("/one-click-test", methods=["POST"])
+def one_click_test_route():
+    """Launch the full demo script that boots the network and sends sample data."""
+    root = Path(__file__).resolve().parent.parent
+    script = root / "one_click_test.sh"
+    try:
+        subprocess.Popen(["bash", str(script)])
+        return jsonify({"status": "started"})
+    except Exception as exc:
+        return jsonify({"status": "error", "error": str(exc)}), 500
+
+
 @app.route("/tde")
 def tde_page():
     """Show threat detection incidents."""

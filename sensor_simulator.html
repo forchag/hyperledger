@@ -22,8 +22,10 @@
     <h1 class="mb-3">Test Sensor Simulator</h1>
     <p class="mb-3">Configure virtual nodes and generate synthetic readings to test the system.</p>
     <button class="btn btn-primary" onclick="startSim()">Start Simulation</button>
+    <button class="btn btn-secondary ms-2" onclick="runDemo()">Run One-Click Demo</button>
     <ul id="endpoints" class="mt-3"></ul>
     <pre id="mapping" class="bg-white border mt-3 p-3"></pre>
+    <pre id="demo-status" class="bg-white border mt-3 p-3"></pre>
   </div>
   <script>
   async function startSim(){
@@ -46,6 +48,17 @@
     const data = await res.json();
     document.getElementById('mapping').textContent = JSON.stringify(data.mapping, null, 2);
     displayEndpoints(data.mapping);
+  }
+
+  async function runDemo(){
+    const res = await fetch('/one-click-test', {method:'POST'});
+    const data = await res.json();
+    const box = document.getElementById('demo-status');
+    if(data.status === 'started'){
+      box.textContent = 'Demo started';
+    }else{
+      box.textContent = 'Error: ' + (data.error || 'unable to start');
+    }
   }
   async function loadMapping(){
     const res = await fetch('/simulation-state');
