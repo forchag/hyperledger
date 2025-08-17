@@ -1,0 +1,14 @@
+[Unit]
+Description=Hyperledger Fabric node bootstrap
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/hyperledger
+ExecStart=%h/hyperledger/node_bootstrap.py mychannel orderer.example.com:7050 /etc/hyperledger/fabric/tlsca.example.com-cert.pem http://ca.example.com:7054 peer0 org1 msp tls mychannel.block
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
