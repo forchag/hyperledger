@@ -10,18 +10,13 @@ type SmartContract struct {
 	contractapi.Contract
 }
 
-type SensorData struct {
-	ID           string  `json:"id"`
-	Seq          int     `json:"seq"`
-	Temperature  float64 `json:"temperature"`
-	Humidity     float64 `json:"humidity"`
-	SoilMoisture float64 `json:"soil_moisture"`
-	PH           float64 `json:"ph"`
-	Light        float64 `json:"light"`
-	WaterLevel   float64 `json:"water_level"`
-	Timestamp    string  `json:"timestamp"`
-	Payload      string  `json:"payload"`
-	Writer       string  `json:"writer"`
+type Reading struct {
+	DeviceID     string             `json:"device_id"`
+	WindowID     string             `json:"window_id"`
+	Stats        map[string]float64 `json:"stats"`
+	LastTS       string             `json:"last_ts"`
+	ResiduesHash string             `json:"residues_hash,omitempty"`
+	Writer       string             `json:"writer_msp"`
 }
 
 type Device struct {
@@ -29,10 +24,14 @@ type Device struct {
 	Owner string `json:"owner"`
 }
 
-type NetworkEvent struct {
-	DeviceID  string `json:"device_id"`
-	EventType string `json:"event_type"`
-	Timestamp string `json:"timestamp"`
+type Event struct {
+	DeviceID   string    `json:"device_id"`
+	TS         string    `json:"ts"`
+	Type       string    `json:"type"`
+	Before     []float64 `json:"before"`
+	After      []float64 `json:"after"`
+	Thresholds []float64 `json:"thresholds"`
+	Writer     string    `json:"writer_msp"`
 }
 
 // SecurityIncident represents a detected security issue for a device.
@@ -79,56 +78,50 @@ func (s *SmartContract) deviceExists(ctx contractapi.TransactionContextInterface
 	return bytes != nil, nil
 }
 
-func (s *SmartContract) RecordSensorData(ctx contractapi.TransactionContextInterface, id string, seq int, temperature float64, humidity float64, soilMoisture float64, ph float64, light float64, waterLevel float64, timestamp string, payload string) error {
+func (s *SmartContract) RecordReading(ctx contractapi.TransactionContextInterface, deviceID string, windowID string, seq int, statsJSON string, lastTS string, residuesHash string) error {
 	writer, err := ctx.GetClientIdentity().GetMSPID()
 	if err != nil {
 		return err
 	}
-	exists, err := s.deviceExists(ctx, id)
+	exists, err := s.deviceExists(ctx, deviceID)
 	if err != nil {
 		return err
 	}
 	if !exists {
 		return fmt.Errorf("device not registered")
 	}
-	readingKey := fmt.Sprintf("SD%s_%d", id, seq)
 
-	// Enforce idempotent re-submission: if the exact payload already exists,
-	// consider it a success without writing a new record.
-	if existing, err := ctx.GetStub().GetState(readingKey); err != nil {
+	stats := map[string]float64{}
+	if err := json.Unmarshal([]byte(statsJSON), &stats); err != nil {
+		return err
+	}
+
+	reading := Reading{
+		DeviceID:     deviceID,
+		WindowID:     windowID,
+		Stats:        stats,
+		LastTS:       lastTS,
+		ResiduesHash: residuesHash,
+		Writer:       writer,
+	}
+	readingBytes, err := json.Marshal(reading)
+	if err != nil {
+		return err
+	}
+
+	key := fmt.Sprintf("reading:%s:%s", deviceID, windowID)
+
+	if existing, err := ctx.GetStub().GetState(key); err != nil {
 		return err
 	} else if existing != nil {
-		var stored SensorData
-		if err := json.Unmarshal(existing, &stored); err != nil {
-			return err
-		}
-		incoming := SensorData{
-			ID:           id,
-			Seq:          seq,
-			Temperature:  temperature,
-			Humidity:     humidity,
-			SoilMoisture: soilMoisture,
-			PH:           ph,
-			Light:        light,
-			WaterLevel:   waterLevel,
-			Timestamp:    timestamp,
-			Payload:      payload,
-			Writer:       writer,
-		}
-		incomingBytes, err := json.Marshal(incoming)
-		if err != nil {
-			return err
-		}
-		if string(existing) == string(incomingBytes) {
-			// Exact same payload already recorded
+		if string(existing) == string(readingBytes) {
 			return nil
 		}
 		return fmt.Errorf("reading already exists")
 	}
 
-	// Enforce monotonic sequence numbers per device
-	lastKey := "LAST" + id
-	if lastSeqBytes, err := ctx.GetStub().GetState(lastKey); err != nil {
+	seqKey := fmt.Sprintf("last_seq:%s", deviceID)
+	if lastSeqBytes, err := ctx.GetStub().GetState(seqKey); err != nil {
 		return err
 	} else if lastSeqBytes != nil {
 		var lastSeq int
@@ -140,35 +133,22 @@ func (s *SmartContract) RecordSensorData(ctx contractapi.TransactionContextInter
 		}
 	}
 
-	data := SensorData{
-		ID:           id,
-		Seq:          seq,
-		Temperature:  temperature,
-		Humidity:     humidity,
-		SoilMoisture: soilMoisture,
-		PH:           ph,
-		Light:        light,
-		WaterLevel:   waterLevel,
-		Timestamp:    timestamp,
-		Payload:      payload,
-		Writer:       writer,
-	}
-	bytes, err := json.Marshal(data)
-	if err != nil {
-		return err
-	}
-	if err := ctx.GetStub().PutState(readingKey, bytes); err != nil {
+	if err := ctx.GetStub().PutState(key, readingBytes); err != nil {
 		return err
 	}
 
-	lastSeqBytes, err := json.Marshal(seq)
+	seqBytes, err := json.Marshal(seq)
 	if err != nil {
 		return err
 	}
-	return ctx.GetStub().PutState(lastKey, lastSeqBytes)
+	if err := ctx.GetStub().PutState(seqKey, seqBytes); err != nil {
+		return err
+	}
+
+	return ctx.GetStub().SetEvent("ReadingCommitted", []byte(key))
 }
 
-func (s *SmartContract) LogEvent(ctx contractapi.TransactionContextInterface, deviceID string, eventType string, timestamp string) error {
+func (s *SmartContract) LogEvent(ctx contractapi.TransactionContextInterface, deviceID string, ts string, eventType string, beforeJSON string, afterJSON string, thresholdsJSON string) error {
 	exists, err := s.deviceExists(ctx, deviceID)
 	if err != nil {
 		return err
@@ -176,13 +156,59 @@ func (s *SmartContract) LogEvent(ctx contractapi.TransactionContextInterface, de
 	if !exists {
 		return fmt.Errorf("device not registered")
 	}
-	ev := NetworkEvent{DeviceID: deviceID, EventType: eventType, Timestamp: timestamp}
+	writer, err := ctx.GetClientIdentity().GetMSPID()
+	if err != nil {
+		return err
+	}
+
+	before := []float64{}
+	if beforeJSON != "" {
+		if err := json.Unmarshal([]byte(beforeJSON), &before); err != nil {
+			return err
+		}
+	}
+	after := []float64{}
+	if afterJSON != "" {
+		if err := json.Unmarshal([]byte(afterJSON), &after); err != nil {
+			return err
+		}
+	}
+	thresholds := []float64{}
+	if thresholdsJSON != "" {
+		if err := json.Unmarshal([]byte(thresholdsJSON), &thresholds); err != nil {
+			return err
+		}
+	}
+
+	ev := Event{
+		DeviceID:   deviceID,
+		TS:         ts,
+		Type:       eventType,
+		Before:     before,
+		After:      after,
+		Thresholds: thresholds,
+		Writer:     writer,
+	}
 	bytes, err := json.Marshal(ev)
 	if err != nil {
 		return err
 	}
-	key := fmt.Sprintf("EVT%s_%s", deviceID, timestamp)
-	return ctx.GetStub().PutState(key, bytes)
+	key := fmt.Sprintf("event:%s:%s", deviceID, ts)
+
+	if existing, err := ctx.GetStub().GetState(key); err != nil {
+		return err
+	} else if existing != nil {
+		if string(existing) == string(bytes) {
+			return nil
+		}
+		return fmt.Errorf("event already exists")
+	}
+
+	if err := ctx.GetStub().PutState(key, bytes); err != nil {
+		return err
+	}
+
+	return ctx.GetStub().SetEvent("EventCommitted", []byte(key))
 }
 
 func (s *SmartContract) SendMessage(ctx contractapi.TransactionContextInterface, from string, to string, payload string, timestamp string) error {
@@ -250,19 +276,78 @@ func (s *SmartContract) RecordAttestation(ctx contractapi.TransactionContextInte
 	return ctx.GetStub().PutState(key, bytes)
 }
 
-func (s *SmartContract) ReadSensorData(ctx contractapi.TransactionContextInterface, id string) (*SensorData, error) {
-	bytes, err := ctx.GetStub().GetState(id)
+func (s *SmartContract) ReadReading(ctx contractapi.TransactionContextInterface, deviceID string, windowID string) (*Reading, error) {
+	key := fmt.Sprintf("reading:%s:%s", deviceID, windowID)
+	bytes, err := ctx.GetStub().GetState(key)
 	if err != nil {
 		return nil, err
 	}
 	if bytes == nil {
 		return nil, fmt.Errorf("data not found")
 	}
-	var data SensorData
+	var data Reading
 	if err := json.Unmarshal(bytes, &data); err != nil {
 		return nil, err
 	}
 	return &data, nil
+}
+
+func (s *SmartContract) QueryReadings(ctx contractapi.TransactionContextInterface, deviceID string, windowID string) ([]*Reading, error) {
+	selector := map[string]interface{}{"selector": map[string]interface{}{"device_id": deviceID}}
+	if windowID != "" {
+		selector["selector"].(map[string]interface{})["window_id"] = windowID
+	}
+	queryBytes, err := json.Marshal(selector)
+	if err != nil {
+		return nil, err
+	}
+	resultsIterator, err := ctx.GetStub().GetQueryResult(string(queryBytes))
+	if err != nil {
+		return nil, err
+	}
+	defer resultsIterator.Close()
+	var results []*Reading
+	for resultsIterator.HasNext() {
+		resp, err := resultsIterator.Next()
+		if err != nil {
+			return nil, err
+		}
+		var r Reading
+		if err := json.Unmarshal(resp.Value, &r); err != nil {
+			return nil, err
+		}
+		results = append(results, &r)
+	}
+	return results, nil
+}
+
+func (s *SmartContract) QueryEvents(ctx contractapi.TransactionContextInterface, deviceID string, ts string) ([]*Event, error) {
+	selector := map[string]interface{}{"selector": map[string]interface{}{"device_id": deviceID}}
+	if ts != "" {
+		selector["selector"].(map[string]interface{})["ts"] = ts
+	}
+	queryBytes, err := json.Marshal(selector)
+	if err != nil {
+		return nil, err
+	}
+	resultsIterator, err := ctx.GetStub().GetQueryResult(string(queryBytes))
+	if err != nil {
+		return nil, err
+	}
+	defer resultsIterator.Close()
+	var results []*Event
+	for resultsIterator.HasNext() {
+		resp, err := resultsIterator.Next()
+		if err != nil {
+			return nil, err
+		}
+		var e Event
+		if err := json.Unmarshal(resp.Value, &e); err != nil {
+			return nil, err
+		}
+		results = append(results, &e)
+	}
+	return results, nil
 }
 
 func main() {
