@@ -90,7 +90,28 @@ HealthServer = _orch.HealthServer
 hmac_sha256 = _orch.hmac_sha256
 main = _orch.main
 
-app = Flask(__name__)
+
+def create_app(config: dict | None = None) -> Flask:
+    """Application factory for the gateway Flask service.
+
+    Parameters
+    ----------
+    config: dict | None
+        Optional configuration values to apply to the application instance.
+
+    Returns
+    -------
+    flask.Flask
+        Configured Flask application ready for registration of routes.
+    """
+
+    application = Flask(__name__)
+    if config:
+        application.config.update(config)
+    return application
+
+
+app = create_app()
 
 # Shared secret for simulator payload signatures
 HMAC_KEY = os.environ.get("HMAC_KEY", "").encode()
