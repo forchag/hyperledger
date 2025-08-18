@@ -24,9 +24,15 @@ def sign_packet(packet: dict, key) -> str:
 class DummyClient:
     def __init__(self):
         self.submitted = []
+        self.tx = 0
 
     def submit(self, bundle):  # pragma: no cover - simple append
+        self.tx += 1
         self.submitted.append(bundle)
+        return f"tx{self.tx}"
+
+    def wait_for_commit(self, tx_id):  # pragma: no cover - no-op
+        pass
 
 
 def make_packet(key, seq=1, urgent=False, window=None):
@@ -71,7 +77,6 @@ def test_urgent_events_promoted():
 
     pkt = make_packet(key, seq=1, urgent=True)
     gw.handle_packet(pkt)
-    gw.flush_event_bundle(force=True)
 
     assert len(client.submitted) == 1
     bundle = client.submitted[0]
@@ -91,7 +96,7 @@ def test_store_and_forward():
             if self.fail:
                 self.fail = False
                 raise ConnectionError("orderer down")
-            super().submit(bundle)
+            return super().submit(bundle)
 
     client = FlakyClient()
     gw = PiGateway(client, {"n1": key.public_key()})

@@ -19,8 +19,8 @@ from dataclasses import dataclass, field
 import json
 import logging
 import time
-from math import floor
 from typing import Dict, List, Protocol, Tuple
+import threading
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
@@ -32,8 +32,11 @@ log = logging.getLogger(__name__)
 class BlockchainClient(Protocol):
     """Minimal protocol a blockchain client must satisfy."""
 
-    def submit(self, bundle: Dict) -> None:  # pragma: no cover - interface stub
-        """Submit a bundle to the blockchain ledger."""
+    def submit(self, bundle: Dict) -> str:  # pragma: no cover - interface stub
+        """Submit a bundle to the blockchain ledger and return a transaction id."""
+
+    def wait_for_commit(self, tx_id: str) -> None:  # pragma: no cover - interface stub
+        """Block until ``tx_id`` is committed and the relevant key is readable."""
 
 
 # ---------------------------------------------------------------------------
@@ -71,13 +74,17 @@ class PiGateway:
 
     client: BlockchainClient
     public_keys: Dict[str, rsa.RSAPublicKey]
-    interval: int = 60
+    interval_minutes: int = 60
 
     bundles: Dict[Tuple[int, int], List[Dict]] = field(default_factory=dict)
-    event_bundle: List[Dict] = field(default_factory=list)
-    event_start: float | None = None
     last_seq: Dict[str, int] = field(default_factory=dict)
     pending: List[Dict] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if not 30 <= self.interval_minutes <= 120:
+            raise ValueError("interval_minutes must be between 30 and 120")
+        # Convert to seconds for internal use
+        self.interval = self.interval_minutes * 60
 
     # ------------------------------------------------------------------
     # Ingestion
@@ -132,27 +139,12 @@ class PiGateway:
 
     def _handle_urgent(self, packet: Dict) -> None:
         now = time.time()
-        if not self.event_bundle:
-            self.event_start = now
-        self.event_bundle.append(packet)
-        # Flush after 60s of accumulation
-        if self.event_start and now - self.event_start >= 60:
-            self.flush_event_bundle()
-
-    def flush_event_bundle(self, force: bool = False) -> None:
-        if not self.event_bundle:
-            return
-        now = time.time()
-        if not force and self.event_start and now - self.event_start < 60:
-            return
         bundle = {
             "type": "event",
-            "events": list(self.event_bundle),
-            "start": self.event_start,
+            "events": [packet],
+            "start": now,
             "end": now,
         }
-        self.event_bundle.clear()
-        self.event_start = None
         self._submit_bundle(bundle)
 
     # ------------------------------------------------------------------
@@ -175,7 +167,6 @@ class PiGateway:
             bundle = {"window_id": wid, "packets": packets}
             self._submit_bundle(bundle)
         self.bundles.clear()
-        self.flush_event_bundle(force=True)
 
     # ------------------------------------------------------------------
     # Store and forward
@@ -183,11 +174,15 @@ class PiGateway:
     def _submit_bundle(self, bundle: Dict) -> None:
         start = time.time()
         try:
-            self.client.submit(bundle)
+            tx_id = self.client.submit(bundle)
+            self.client.wait_for_commit(tx_id)
             latency = time.time() - start
             size = len(bundle.get("packets", bundle.get("events", [])))
             log.info(
-                "bundle committed size=%d latency=%.3f type=%s", size, latency, bundle.get("type", "data")
+                "bundle committed size=%d latency=%.3f type=%s",
+                size,
+                latency,
+                bundle.get("type", "data"),
             )
         except Exception as exc:  # pragma: no cover - network errors
             log.warning("store-and-forward bundle: %s", exc)
@@ -200,6 +195,11 @@ class PiGateway:
         self.pending.clear()
         for b in bundles:
             self._submit_bundle(b)
+
+    def run_scheduler(self, stop: threading.Event) -> None:
+        """Periodically flush ready bundles until ``stop`` is set."""
+        while not stop.wait(self.interval):
+            self.flush_ready()
 
 
 __all__ = ["PiGateway", "verify_signature"]
