@@ -12,7 +12,7 @@ It introduces a **five-tier, color-separated** design and embeds **what/how/when
 
 I've identified and fixed the Mermaid syntax error in your architecture diagram. The issue was with the `&` character in the ESP32 node text - it needs to be escaped as `&amp;` in Mermaid diagrams. Here's the corrected version:
 
-```markdown
+
 # Figure 1 — Five-Tier System Architecture (ESP32 → Pi → Mesh → Fabric → Observability)
 
 ## Architecture Diagram (Fixed)
