@@ -16,6 +16,8 @@ sequenceDiagram
     participant METRICS as Metrics Exporter
     participant PROM as Prometheus
     participant DASH as Dashboard/Explorer
+    participant ALERTS as Alertmanager
+    participant OP as Operator
 
     ESP32-->>PI: {device_id, seq, window_id, stats, urgent, [crt?], sig}\nWi-Fi WPA2/3\n1–5 min samples or events
     PI-->>ESP32: ACK\nkeepalive/command
@@ -35,6 +37,9 @@ sequenceDiagram
     CC-->>METRICS: emit metrics
     METRICS-->>PROM: expose /metrics\nHTTP scrape
     PROM-->>DASH: render graphs\n15 s pull
+    PROM-->>ALERTS: push alerts
+    ALERTS-->>OP: notify
+    DASH-->>OP: visualize metrics
 ```
 
 **What is transmitted**
@@ -53,4 +58,7 @@ sequenceDiagram
 | Chaincode → Metrics | internal | counters/gauges | n/a | on commit | n/a |
 | Metrics → Prometheus | HTTP | `/metrics` scrape | text | 15 s poll | HTTP retry |
 | Prometheus → Dashboard | HTTP/WebSocket | rendered metrics | text/JSON | on demand | HTTP retry |
+| Prometheus → Alertmanager | HTTP | alert payloads | small | on rule trigger | HTTP retry |
+| Alertmanager → Operator | Email/Webhook | notification | text | on alert | transport retry |
+| Dashboard → Operator | HTTP/WebSocket | visualization updates | text/JSON | on demand | HTTP retry |
 
