@@ -7,11 +7,11 @@ Related: [Five-Tier System Architecture](figure1_three_tier_system_architecture.
 ```mermaid
 flowchart LR
     ESP32((ESP32)):::device
-    INGRESS["Pi Ingress\ningress_packets_total\nduplicates_total\nlatency_seconds"]:::pi
-    BUNDLER["Bundler/Scheduler\nbundles_submitted_total&#123;type&#125;\nstore_backlog_files\nevents_rate_limited_total\nbundle_latency_seconds"]:::pi
-    MESH["Mesh\nmesh_neighbors\nmesh_retries_total"]:::network
-    FABRIC["Fabric submit→commit\nsubmit_commit_seconds\ntx_retry_total"]:::fabric
-    OBS["Observability /metrics\nexporter_up\nalert_events_total"]:::observability
+    INGRESS["Pi Ingress\ningress_packets_total\nduplicates_total\ndrops_total\nlatency_seconds"]:::pi
+    BUNDLER["Bundler/Scheduler\nbundles_submitted_total\\{type\\}\nstore_backlog_files\nevents_rate_limited_total\nbundle_latency_seconds"]:::pi
+    MESH["Mesh\nmesh_neighbors\nmesh_retries_total\nmesh_rssi_avg"]:::network
+    FABRIC["Fabric submit→commit\nsubmit_commit_seconds\ntx_retry_total\nendorsement_failures_total"]:::fabric
+    OBS["Observability /metrics\nexporter_up\nalert_events_total\nscrape_duration_seconds"]:::observability
 
     ESP32 --> INGRESS --> BUNDLER --> MESH --> FABRIC --> OBS
 
@@ -24,7 +24,7 @@ flowchart LR
 
 ## Part B — Latency Pipeline
 
-`Latency_total = L_read + L_wifi + L_ingress + L_bundle_wait + L_submit→commit`
+`Latency_total = L_read + L_wifi + L_ingress + L_bundle_wait + L_sched + L_mesh + L_submit→commit`
 
 ```mermaid
 graph LR
@@ -33,10 +33,11 @@ graph LR
     L_ingress[L_ingress\npacket processing]
     L_bundle[L_bundle_wait\n30–120 min periodic\n≈0 event (60–120 s coalesce)]
     L_sched[L_scheduler\nscheduling latency]
+    L_mesh[L_mesh\nmesh hop latency]
     L_sc[L_submit→commit\n1–2 s (2 Pis)\n3–5 s (20 Pis)\n10–15 s (100 Pis)]
     L_total[Latency_total]
 
-    L_read --> L_wifi --> L_ingress --> L_bundle --> L_sched --> L_sc --> L_total
+    L_read --> L_wifi --> L_ingress --> L_bundle --> L_sched --> L_mesh --> L_sc --> L_total
 ```
 
 ## Part C — Energy Budgets
