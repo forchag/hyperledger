@@ -1,6 +1,6 @@
 Here's the corrected and complete architecture documentation in a GitHub-compatible markdown file:
 
-```markdown
+
 # Figure 1 — Five-Tier System Architecture (ESP32 → Pi → Mesh → Fabric → Observability)
 
 This document is a **drop-in replacement** for the previous three-tier figure.  
@@ -9,7 +9,6 @@ It introduces a **five-tier, color-separated** design and embeds **what/how/when
 > **Ledger cadence:** periodic blocks every **30–120 min** (configurable) **and** event-triggered blocks (immediate).  
 > **Scope:** self-contained farm network (no external connectivity required).
 
----
 
 ## Architecture Diagram
 
