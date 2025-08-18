@@ -3,6 +3,10 @@ Here's the corrected and complete architecture documentation in a GitHub-compati
 
 # Figure 1 — Five-Tier System Architecture (ESP32 → Pi → Mesh → Fabric → Observability)
 
+Related Figures:
+- [Full Communication Scheme (ESP32 ↔ Pi ↔ Mesh ↔ Fabric ↔ Observability)](figure_comm_all_nodes.md)
+- [Evaluation: Energy & Communications Metrics (ESP32 + Pi + Mesh + Fabric)](figure_eval_energy_comm_metrics.md)
+
 This document is a **drop-in replacement** for the previous three-tier figure.  
 It introduces a **five-tier, color-separated** design and embeds **what/how/when** for every hop, plus **block size**, **consensus (Raft)**, **Merkle tree**, and **CRT/modular arithmetic** call-outs.
 
