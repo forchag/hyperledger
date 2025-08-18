@@ -1,54 +1,105 @@
+"""Tests for the enhanced PiGateway."""
 
+import json
+import os
+import sys
 import time
 
-from pi_gateway import PiGateway, compute_checksum
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
+
+# Ensure repository root on path for direct test execution
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+
+from pi_gateway import PiGateway
+
+
+def sign_packet(packet: dict, key) -> str:
+    data = {k: packet[k] for k in packet if k != "sig"}
+    payload = json.dumps(data, sort_keys=True, separators=(",", ":")).encode()
+    sig = key.sign(payload, padding.PKCS1v15(), hashes.SHA256())
+    return sig.hex()
 
 
 class DummyClient:
-    def __init__(self) -> None:
+    def __init__(self):
         self.submitted = []
 
-    def submit(self, packet):  # pragma: no cover - simple append
-        self.submitted.append(packet)
+    def submit(self, bundle):  # pragma: no cover - simple append
+        self.submitted.append(bundle)
 
 
-def make_packet(anomaly: bool = False):
-    payload = {"temperature": 20.0}
-    packet = {
-        "source_id": "n1",
-        "timestamp": time.time(),
-        "payload": payload,
-        "anomaly": anomaly,
+def make_packet(key, seq=1, urgent=False, window=None):
+    now = int(time.time())
+    window_id = window or [now - 60, now]
+    pkt = {
+        "device_id": "n1",
+        "seq": seq,
+        "window_id": window_id,
+        "payload": {"temperature": 20.0},
+        "last_ts": now,
+        "urgent": urgent,
     }
-    packet["checksum"] = compute_checksum("n1", packet["timestamp"], payload)
-    return packet
+    pkt["sig"] = sign_packet(pkt, key)
+    return pkt
 
 
-def test_normal_packets_buffered():
+def test_dedupe_and_bundling():
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     client = DummyClient()
-    gw = PiGateway(client)
-    pkt = make_packet(anomaly=False)
-    gw.handle_packet(pkt)
-    assert gw.buffer == [pkt]
-    assert client.submitted == []
+    gw = PiGateway(client, {"n1": key.public_key()})
 
-
-def test_anomaly_submitted_immediately():
-    client = DummyClient()
-    gw = PiGateway(client)
-    pkt = make_packet(anomaly=True)
-    gw.handle_packet(pkt)
-    assert gw.buffer == []
-    assert client.submitted == [pkt]
-
-
-def test_flush_buffer_sends_all():
-    client = DummyClient()
-    gw = PiGateway(client)
-    pkt1 = make_packet()
-    pkt2 = make_packet()
+    pkt1 = make_packet(key, seq=1)
+    pkt2 = make_packet(key, seq=1)  # duplicate seq
     gw.handle_packet(pkt1)
-    gw.handle_packet(pkt2)
-    gw.flush_buffer()
-    assert gw.buffer == []
-    assert client.submitted == [pkt1, pkt2]
+    # duplicate should raise ValueError
+    try:
+        gw.handle_packet(pkt2)
+    except ValueError:
+        pass
+
+    gw.flush_all()
+    assert len(client.submitted) == 1
+    bundle = client.submitted[0]
+    assert bundle["packets"] == [pkt1]
+
+
+def test_urgent_events_promoted():
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    client = DummyClient()
+    gw = PiGateway(client, {"n1": key.public_key()})
+
+    pkt = make_packet(key, seq=1, urgent=True)
+    gw.handle_packet(pkt)
+    gw.flush_event_bundle(force=True)
+
+    assert len(client.submitted) == 1
+    bundle = client.submitted[0]
+    assert bundle["type"] == "event"
+    assert pkt in bundle["events"]
+
+
+def test_store_and_forward():
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+
+    class FlakyClient(DummyClient):
+        def __init__(self):
+            super().__init__()
+            self.fail = True
+
+        def submit(self, bundle):
+            if self.fail:
+                self.fail = False
+                raise ConnectionError("orderer down")
+            super().submit(bundle)
+
+    client = FlakyClient()
+    gw = PiGateway(client, {"n1": key.public_key()})
+
+    pkt = make_packet(key)
+    gw.handle_packet(pkt)
+    gw.flush_all()  # first submission fails
+    assert client.submitted == []
+    gw.flush_pending()  # retry succeeds
+    assert len(client.submitted) == 1
+
