@@ -5,6 +5,9 @@ version: '3.7'
 services:
   orderer.example.com:
     restart: unless-stopped
+    environment:
+      - ORDERER_GENERAL_BATCHTIMEOUT=2s
+      - ORDERER_GENERAL_BATCHSIZE_MAXMESSAGECOUNT=200
     volumes:
       - ../organizations/ordererOrganizations/example.com/orderers/orderer.example.com/msp:/var/hyperledger/orderer/msp
       - ../organizations/ordererOrganizations/example.com/orderers/orderer.example.com/tls:/var/hyperledger/orderer/tls
