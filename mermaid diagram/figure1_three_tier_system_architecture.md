@@ -16,20 +16,20 @@ flowchart LR
   %% ========= TIER 1: ESP32 + SENSORS =========
   subgraph T1["Tier 1 — ESP32 + Sensors<br/>(Leaf Intelligence)"]
     direction TB
-    SENSORS[[DHT22 • Light • pH • Soil Moisture • Water Level]]
-    ESP32[ESP32 Node<br/>• Sampling 1–5 min<br/>• Rolling stats per window<br/>• Threshold & Δ-rate events<br/>• Monotonic seq<br/>• Optional CRT residues]
+    SENSORS[[DHT22, Light, pH, Soil Moisture, Water Level]]
+    ESP32[ESP32 Node<br/>- Sampling 1–5 min<br/>- Rolling stats per window<br/>- Threshold & Δ-rate events<br/>- Monotonic seq<br/>- Optional CRT residues]
     SENSORS --> ESP32
   end
   class T1 tier1
   class SENSORS,ESP32 tier1
 
   %% ========= TIER 2: PI GATEWAY =========
-  subgraph T2["Tier 2 — Raspberry Pi Gateway<br/>(Ingest • Verify • Bundle • Schedule)"]
+  subgraph T2["Tier 2 — Raspberry Pi Gateway<br/>(Ingest, Verify, Bundle, Schedule)"]
     direction TB
-    INGRESS[IngressService<br/>• Verify HMAC/Ed25519<br/>• Dedupe (device_id, seq)<br/>• CRT recombination (Garner)]
-    BUNDLER[Bundler<br/>• IntervalBundle (30–120 min)<br/>• Event coalesce (60–120 s)<br/>• Rate-limit events]
-    SOF[StoreAndForward<br/>• Durable queue in STORE_DIR<br/>• Retry with backoff]
-    SCHED[Scheduler<br/>• Submit IntervalBundle on cadence<br/>• Submit EventBundle immediately]
+    INGRESS[IngressService<br/>- Verify HMAC/Ed25519<br/>- Dedupe device_id and seq<br/>- CRT recombination (Garner)]
+    BUNDLER[Bundler<br/>- IntervalBundle (30–120 min)<br/>- Event coalesce (60–120 s)<br/>- Rate-limit events]
+    SOF[StoreAndForward<br/>- Durable queue in STORE_DIR<br/>- Retry with backoff]
+    SCHED[Scheduler<br/>- Submit IntervalBundle on cadence<br/>- Submit EventBundle immediately]
     INGRESS --> BUNDLER --> SCHED
     BUNDLER --> SOF
   end
@@ -39,8 +39,8 @@ flowchart LR
   %% ========= TIER 3: MESH (WokFi + BATMAN) =========
   subgraph T3["Tier 3 — Pi⇄Pi Mesh Network<br/>(WokFi Directional + BATMAN-adv L2 Mesh)"]
     direction TB
-    MESH[Mesh (bat0)<br/>• Self-healing L2<br/>• 2–5 ms/hop • Tens of Mbps<br/>• WPA2/3 + WireGuard overlay]
-    MON[MeshMonitor (batctl)<br/>• Neighbors • ETX • Path changes]
+    MESH[Mesh (bat0)<br/>- Self-healing L2<br/>- 2–5 ms/hop and tens of Mbps<br/>- WPA2/3 + WireGuard overlay]
+    MON[MeshMonitor (batctl)<br/>- Neighbors<br/>- ETX<br/>- Path changes]
   end
   class T3 tier3
   class MESH,MON tier3
@@ -48,10 +48,10 @@ flowchart LR
   %% ========= TIER 4: BLOCKCHAIN (FABRIC) =========
   subgraph T4["Tier 4 — Blockchain (Hyperledger Fabric)"]
     direction TB
-    ORDERER[Orderer(s) — Raft<br/>• 1–3 nodes<br/>• Receives bundled tx]
-    PEERS[Peers on Pis<br/>• Validate & Commit<br/>• CouchDB indexes (device, window, ts)]
-    CC[Chaincode<br/>Keys:<br/>• reading:device_id:window_id → {min,avg,max,std,count,last_ts,residues_hash?,writer_msp}<br/>• event:device_id:ts → {type,before[],after[],thresholds,writer_msp}<br/>Guards:<br/>• last_seq:device_id • Idempotency]
-    BLOCK[Block Structure<br/>• ~100 kB typical (summaries)<br/>• PreferredMaxBytes ≈ 1 MB<br/>• Merkle tree over tx set<br/>• Header {prev_hash, merkle_root, ts}]
+    ORDERER[Orderer(s) — Raft<br/>- 1–3 nodes<br/>- Receives bundled tx]
+    PEERS[Peers on Pis<br/>- Validate & Commit<br/>- CouchDB indexes (device, window, ts)]
+    CC[Chaincode<br/>Keys:<br/>- reading:device_id:window_id → {min,avg,max,std,count,last_ts,residues_hash?,writer_msp}<br/>- event:device_id:ts → {type,before[],after[],thresholds,writer_msp}<br/>Guards:<br/>- last_seq:device_id<br/>- Idempotency]
+    BLOCK[Block Structure<br/>- ~100 kB typical (summaries)<br/>- PreferredMaxBytes ≈ 1 MB<br/>- Merkle tree over tx set<br/>- Header {prev_hash, merkle_root, ts}]
   end
   class T4 tier4
   class ORDERER,PEERS,CC,BLOCK tier4
@@ -59,16 +59,16 @@ flowchart LR
   %% ========= TIER 5: OBSERVABILITY / OPS =========
   subgraph T5["Tier 5 — Observability & Ops"]
     direction TB
-    HEALTH[Health & Readiness<br/>• /healthz (mesh+pipeline)<br/>• /readyz (recent commit)]
-    METRICS[Metrics (Prometheus)<br/>• ingress_packets_total<br/>• bundles_submitted_total{type}<br/>• submit_commit_seconds<br/>• mesh_neighbors, store_backlog_files]
-    DASH[Dashboards / Explorer<br/>• Periodic state view<br/>• Event timeline]
+    HEALTH[Health & Readiness<br/>- /healthz (mesh+pipeline)<br/>- /readyz (recent commit)]
+    METRICS[Metrics (Prometheus)<br/>- ingress_packets_total<br/>- bundles_submitted_total{type}<br/>- submit_commit_seconds<br/>- mesh_neighbors, store_backlog_files]
+    DASH[Dashboards / Explorer<br/>- Periodic state view<br/>- Event timeline]
   end
   class T5 tier5
   class HEALTH,METRICS,DASH tier5
 
   %% ========= DATA CHANNELS / LABELLED EDGES =========
-  ESP32 -- "Wi-Fi client → Pi SSID\nPayload ≤ ~100 B\nPeriodic Summary (10–15 min) • Event Alert (immediate)\n{device_id, seq, window_id, stats, last_ts, urgent, crt?, sig}" --> INGRESS
-  INGRESS -- "NormalizedRecord\n(sig OK • CRT→value • dedup OK)" --> BUNDLER
+  ESP32 -- "Wi-Fi client → Pi SSID\nPayload ≤ ~100 B\nPeriodic Summary (10–15 min) and Event Alert (immediate)\n{device_id, seq, window_id, stats, last_ts, urgent, crt?, sig}" --> INGRESS
+  INGRESS -- "NormalizedRecord\n(sig OK, CRT→value, dedup OK)" --> BUNDLER
   SCHED -- "Submit IntervalBundle (every 30–120 min)\nSubmit EventBundle (immediate)" --> MESH
   MESH -- "gRPC over mesh (WireGuard recommended)\nLatency 2–5 ms/hop" --> ORDERER
   ORDERER -- "Ordered block" --> PEERS
@@ -79,18 +79,18 @@ flowchart LR
   %% ========= NOTES =========
   note right of ESP32:::data
     CRT / Modular Arithmetic (optional):
-    • Leaf packs large numbers as residues r_i = x mod m_i
-    • Pi recombines via Garner to recover x
-    • Saves airtime & memory on ESP32
+    - Leaf packs large numbers as residues r_i = x mod m_i
+    - Pi recombines via Garner to recover x
+    - Saves airtime & memory on ESP32
   end
 
   note right of BLOCK:::data
     Block parameters:
-    • Block size: ~100 kB typical (summaries); PreferredMaxBytes ≈ 1 MB
-    • Consensus: Raft (1–3 orderers)
-    • Merkle tree: tx hashes → merkle_root in header
-    • Periodic blocks: every 30–120 min (from Scheduler)
-    • Event-triggered blocks: immediate on anomaly
+    - Block size: ~100 kB typical (summaries); PreferredMaxBytes ≈ 1 MB
+    - Consensus: Raft (1–3 orderers)
+    - Merkle tree: tx hashes → merkle_root in header
+    - Periodic blocks: every 30–120 min (from Scheduler)
+    - Event-triggered blocks: immediate on anomaly
   end
 ```
 
@@ -103,7 +103,7 @@ flowchart LR
 - **Timing:** sensor sampling every 1–5 min; periodic summary uplink every 10–15 min; event alerts immediately.
 - **Failure Behavior:** buffers minimal state and retries uplink on next interval; sequence gaps detected by gateway.
 
-#### Tier 2 — Raspberry Pi Gateway (Ingest • Verify • Bundle • Schedule)
+#### Tier 2 — Raspberry Pi Gateway (Ingest, Verify, Bundle, Schedule)
 - **Responsibilities:** verify signatures, deduplicate, recombine CRT residues, bundle records, persist queue, schedule submissions.
 - **Components:** [IngressService](../flask_app/IngressService.md), [Bundler](../flask_app/Bundler.md), [StoreAndForward](../flask_app/StoreAndForward.md), [Scheduler](../flask_app/Scheduler.md).
 - **Inputs:** Wi-Fi payloads from Tier 1. **Outputs:** `IntervalBundle` and `EventBundle` to mesh.
