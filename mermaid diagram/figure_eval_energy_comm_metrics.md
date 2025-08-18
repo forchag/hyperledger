@@ -6,14 +6,20 @@ Related: [Five-Tier System Architecture](figure1_three_tier_system_architecture.
 
 ```mermaid
 flowchart LR
-    ESP32((ESP32))
-    INGRESS[Pi Ingress\ningress_packets_total\nduplicates_total]
-    BUNDLER[Bundler/Scheduler\nbundles_submitted_total{type}\nstore_backlog_files\nevents_rate_limited_total]
-    MESH[Mesh\nmesh_neighbors]
-    FABRIC[Fabric submit→commit\nsubmit_commit_seconds]
-    OBS[Observability /metrics]
+    ESP32((ESP32)):::device
+    INGRESS["Pi Ingress\ningress_packets_total\nduplicates_total\nlatency_seconds"]:::pi
+    BUNDLER["Bundler/Scheduler\nbundles_submitted_total&#123;type&#125;\nstore_backlog_files\nevents_rate_limited_total\nbundle_latency_seconds"]:::pi
+    MESH["Mesh\nmesh_neighbors\nmesh_retries_total"]:::network
+    FABRIC["Fabric submit→commit\nsubmit_commit_seconds\ntx_retry_total"]:::fabric
+    OBS["Observability /metrics\nexporter_up\nalert_events_total"]:::observability
 
     ESP32 --> INGRESS --> BUNDLER --> MESH --> FABRIC --> OBS
+
+    classDef device fill:#e0f7fa,stroke:#006064,color:#006064;
+    classDef pi fill:#fff8e1,stroke:#ff6f00,color:#ff6f00;
+    classDef network fill:#e8f5e9,stroke:#2e7d32,color:#2e7d32;
+    classDef fabric fill:#f3e5f5,stroke:#6a1b9a,color:#6a1b9a;
+    classDef observability fill:#fbe9e7,stroke:#d84315,color:#d84315;
 ```
 
 ## Part B — Latency Pipeline
@@ -22,14 +28,15 @@ flowchart LR
 
 ```mermaid
 graph LR
-    L_read[L_read]
-    L_wifi[L_wifi\n10–20 ms]
-    L_ingress[L_ingress]
+    L_read[L_read\nsensor sampling]
+    L_wifi[L_wifi\n10–20 ms\ntransmit over Wi-Fi]
+    L_ingress[L_ingress\npacket processing]
     L_bundle[L_bundle_wait\n30–120 min periodic\n≈0 event (60–120 s coalesce)]
+    L_sched[L_scheduler\nscheduling latency]
     L_sc[L_submit→commit\n1–2 s (2 Pis)\n3–5 s (20 Pis)\n10–15 s (100 Pis)]
     L_total[Latency_total]
 
-    L_read --> L_wifi --> L_ingress --> L_bundle --> L_sc --> L_total
+    L_read --> L_wifi --> L_ingress --> L_bundle --> L_sched --> L_sc --> L_total
 ```
 
 ## Part C — Energy Budgets
