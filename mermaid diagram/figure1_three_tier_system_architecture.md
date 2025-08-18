@@ -14,7 +14,7 @@ flowchart LR
   classDef data fill:#FFFFFF,stroke:#999,stroke-dasharray: 3 3,color:#333;
 
   %% ========= TIER 1: ESP32 + SENSORS =========
-  subgraph T1[Tier 1 — ESP32 + Sensors<br/>(Leaf Intelligence)]
+  subgraph T1["Tier 1 — ESP32 + Sensors<br/>(Leaf Intelligence)"]
     direction TB
     SENSORS[[DHT22 • Light • pH • Soil Moisture • Water Level]]
     ESP32[ESP32 Node<br/>• Sampling 1–5 min<br/>• Rolling stats per window<br/>• Threshold & Δ-rate events<br/>• Monotonic seq<br/>• Optional CRT residues]
@@ -24,7 +24,7 @@ flowchart LR
   class SENSORS,ESP32 tier1
 
   %% ========= TIER 2: PI GATEWAY =========
-  subgraph T2[Tier 2 — Raspberry Pi Gateway<br/>(Ingest • Verify • Bundle • Schedule)]
+  subgraph T2["Tier 2 — Raspberry Pi Gateway<br/>(Ingest • Verify • Bundle • Schedule)"]
     direction TB
     INGRESS[IngressService<br/>• Verify HMAC/Ed25519<br/>• Dedupe (device_id, seq)<br/>• CRT recombination (Garner)]
     BUNDLER[Bundler<br/>• IntervalBundle (30–120 min)<br/>• Event coalesce (60–120 s)<br/>• Rate-limit events]
@@ -37,7 +37,7 @@ flowchart LR
   class INGRESS,BUNDLER,SOF,SCHED tier2
 
   %% ========= TIER 3: MESH (WokFi + BATMAN) =========
-  subgraph T3[Tier 3 — Pi⇄Pi Mesh Network<br/>(WokFi Directional + BATMAN-adv L2 Mesh)]
+  subgraph T3["Tier 3 — Pi⇄Pi Mesh Network<br/>(WokFi Directional + BATMAN-adv L2 Mesh)"]
     direction TB
     MESH[Mesh (bat0)<br/>• Self-healing L2<br/>• 2–5 ms/hop • Tens of Mbps<br/>• WPA2/3 + WireGuard overlay]
     MON[MeshMonitor (batctl)<br/>• Neighbors • ETX • Path changes]
@@ -46,7 +46,7 @@ flowchart LR
   class MESH,MON tier3
 
   %% ========= TIER 4: BLOCKCHAIN (FABRIC) =========
-  subgraph T4[Tier 4 — Blockchain (Hyperledger Fabric)]
+  subgraph T4["Tier 4 — Blockchain (Hyperledger Fabric)"]
     direction TB
     ORDERER[Orderer(s) — Raft<br/>• 1–3 nodes<br/>• Receives bundled tx]
     PEERS[Peers on Pis<br/>• Validate & Commit<br/>• CouchDB indexes (device, window, ts)]
@@ -57,7 +57,7 @@ flowchart LR
   class ORDERER,PEERS,CC,BLOCK tier4
 
   %% ========= TIER 5: OBSERVABILITY / OPS =========
-  subgraph T5[Tier 5 — Observability & Ops]
+  subgraph T5["Tier 5 — Observability & Ops"]
     direction TB
     HEALTH[Health & Readiness<br/>• /healthz (mesh+pipeline)<br/>• /readyz (recent commit)]
     METRICS[Metrics (Prometheus)<br/>• ingress_packets_total<br/>• bundles_submitted_total{type}<br/>• submit_commit_seconds<br/>• mesh_neighbors, store_backlog_files]
