@@ -11,7 +11,7 @@ from cryptography.hazmat.primitives.asymmetric import padding, rsa
 # Ensure repository root on path for direct test execution
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from pi_gateway import PiGateway
+from pi_gateway import PiGateway, DeviceRegistry
 
 
 def sign_packet(packet: dict, key) -> str:
@@ -35,7 +35,7 @@ class DummyClient:
         pass
 
 
-def make_packet(key, seq=1, urgent=False, window=None):
+def make_packet(key, seq=1, urgent=False, window=None, key_id="k1"):
     now = int(time.time())
     window_id = window or [now - 60, now]
     pkt = {
@@ -45,6 +45,7 @@ def make_packet(key, seq=1, urgent=False, window=None):
         "payload": {"temperature": 20.0},
         "last_ts": now,
         "urgent": urgent,
+        "key_id": key_id,
     }
     pkt["sig"] = sign_packet(pkt, key)
     return pkt
@@ -53,7 +54,9 @@ def make_packet(key, seq=1, urgent=False, window=None):
 def test_dedupe_and_bundling():
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     client = DummyClient()
-    gw = PiGateway(client, {"n1": key.public_key()})
+    reg = DeviceRegistry()
+    reg.add_device("n1", "owner", [], "k1", key.public_key())
+    gw = PiGateway(client, reg)
 
     pkt1 = make_packet(key, seq=1)
     pkt2 = make_packet(key, seq=1)  # duplicate seq
@@ -73,7 +76,9 @@ def test_dedupe_and_bundling():
 def test_urgent_events_promoted():
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     client = DummyClient()
-    gw = PiGateway(client, {"n1": key.public_key()})
+    reg = DeviceRegistry()
+    reg.add_device("n1", "owner", [], "k1", key.public_key())
+    gw = PiGateway(client, reg)
 
     pkt = make_packet(key, seq=1, urgent=True)
     gw.handle_packet(pkt)
@@ -99,7 +104,9 @@ def test_store_and_forward():
             return super().submit(bundle)
 
     client = FlakyClient()
-    gw = PiGateway(client, {"n1": key.public_key()})
+    reg = DeviceRegistry()
+    reg.add_device("n1", "owner", [], "k1", key.public_key())
+    gw = PiGateway(client, reg)
 
     pkt = make_packet(key)
     gw.handle_packet(pkt)
@@ -107,4 +114,31 @@ def test_store_and_forward():
     assert client.submitted == []
     gw.flush_pending()  # retry succeeds
     assert len(client.submitted) == 1
+
+
+def test_spoof_and_key_rotation():
+    key1 = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    key2 = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    client = DummyClient()
+    reg = DeviceRegistry()
+    reg.add_device("n1", "owner", [], "k1", key1.public_key())
+    gw = PiGateway(client, reg)
+
+    pkt1 = make_packet(key1, seq=1, key_id="k1")
+    gw.handle_packet(pkt1)
+
+    spoof = make_packet(key2, seq=2, key_id="k1")
+    try:
+        gw.handle_packet(spoof)
+    except ValueError:
+        pass
+
+    reg.rotate_key("n1", "k2", key2.public_key())
+    pkt2 = make_packet(key2, seq=2, key_id="k2")
+    gw.handle_packet(pkt2)
+
+    gw.flush_all()
+    assert len(client.submitted) == 1
+    bundle = client.submitted[0]
+    assert bundle["packets"] == [pkt1, pkt2]
 
