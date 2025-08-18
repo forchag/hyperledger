@@ -16,10 +16,11 @@ capabilities include:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import hashlib
 import json
 import logging
 import time
-from typing import Dict, List, Protocol, Tuple
+from typing import Dict, List, Optional, Protocol, Tuple
 import threading
 
 from cryptography.hazmat.primitives import hashes
@@ -27,6 +28,56 @@ from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 
 log = logging.getLogger(__name__)
+
+
+@dataclass
+class DeviceRecord:
+    """Registry entry for a sensor device."""
+
+    owner: str
+    sensors: List[str]
+    keys: Dict[str, rsa.RSAPublicKey]
+    active: str
+
+
+class DeviceRegistry:
+    """In-memory mapping of device metadata and keys."""
+
+    def __init__(self) -> None:
+        self.devices: Dict[str, DeviceRecord] = {}
+
+    def add_device(
+        self,
+        device_id: str,
+        owner: str,
+        sensors: List[str],
+        key_id: str,
+        key: rsa.RSAPublicKey,
+    ) -> None:
+        self.devices[device_id] = DeviceRecord(owner, sensors, {key_id: key}, key_id)
+
+    def rotate_key(self, device_id: str, key_id: str, key: rsa.RSAPublicKey) -> None:
+        dev = self.devices[device_id]
+        dev.keys[key_id] = key
+        dev.active = key_id
+
+    def get_active_key(self, device_id: str) -> Optional[rsa.RSAPublicKey]:
+        dev = self.devices.get(device_id)
+        if not dev:
+            return None
+        return dev.keys.get(dev.active)
+
+    def get_active_key_id(self, device_id: str) -> Optional[str]:
+        dev = self.devices.get(device_id)
+        if not dev:
+            return None
+        return dev.active
+
+    def get_key(self, device_id: str, key_id: str) -> Optional[rsa.RSAPublicKey]:
+        dev = self.devices.get(device_id)
+        if not dev:
+            return None
+        return dev.keys.get(key_id)
 
 
 class BlockchainClient(Protocol):
@@ -73,7 +124,7 @@ class PiGateway:
     """Validate, bundle and forward ESP32 payloads."""
 
     client: BlockchainClient
-    public_keys: Dict[str, rsa.RSAPublicKey]
+    registry: DeviceRegistry
     interval_minutes: int = 60
 
     bundles: Dict[Tuple[int, int], List[Dict]] = field(default_factory=dict)
@@ -92,16 +143,21 @@ class PiGateway:
     def validate(self, packet: Dict) -> bool:
         """Verify presence of required fields, signature and sequence order."""
 
-        required = {"device_id", "seq", "sig"}
+        required = {"device_id", "seq", "sig", "key_id"}
         if not required.issubset(packet):
             return False
         dev = packet["device_id"]
-        if dev not in self.public_keys:
+        key_id = packet["key_id"]
+        record = self.registry.devices.get(dev)
+        if not record or record.active != key_id:
+            return False
+        pub = record.keys.get(key_id)
+        if not pub:
             return False
         if packet["seq"] <= self.last_seq.get(dev, -1):
             # Duplicate or out‑of‑order packet
             return False
-        if not verify_signature(packet, self.public_keys[dev]):
+        if not verify_signature(packet, pub):
             return False
         return True
 
@@ -110,6 +166,9 @@ class PiGateway:
 
         if not self.validate(packet):
             raise ValueError("invalid packet")
+        if "residues_hash" not in packet:
+            blob = json.dumps(packet.get("payload", {}), sort_keys=True, separators=(",", ":")).encode()
+            packet["residues_hash"] = hashlib.sha256(blob).hexdigest()
         dev = packet["device_id"]
         self.last_seq[dev] = packet["seq"]
 
