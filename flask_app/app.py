@@ -24,6 +24,7 @@ import io
 import sys
 import time
 import re
+import importlib.util
 from prometheus_client import (
     Counter,
     Histogram,
@@ -65,6 +66,29 @@ from nft_traceability import AgriNFT, TraceabilityLedger, verify_product
 from sensor_simulator import build_mapping
 from identity_enrollment import enroll_identity
 from channel_block_retrieval import fetch_channel_block
+
+# Load gateway orchestrator components from the adjacent module so this file
+# serves as the main import point for both the legacy Flask endpoints and the
+# newer Raspberry Pi gateway services.
+_orch_spec = importlib.util.spec_from_file_location(
+    "gateway_orchestrator", Path(__file__).with_name("orchestrator.py")
+)
+_orch = importlib.util.module_from_spec(_orch_spec)
+sys.modules["gateway_orchestrator"] = _orch
+_orch_spec.loader.exec_module(_orch)  # type: ignore[misc]
+
+# Re-export orchestrator symbols for external consumers and tests.
+Settings = _orch.Settings
+ConfigService = _orch.ConfigService
+MeshMonitor = _orch.MeshMonitor
+IngressService = _orch.IngressService
+Bundler = _orch.Bundler
+StoreAndForward = _orch.StoreAndForward
+FabricClient = _orch.FabricClient
+Scheduler = _orch.Scheduler
+HealthServer = _orch.HealthServer
+hmac_sha256 = _orch.hmac_sha256
+main = _orch.main
 
 app = Flask(__name__)
 
@@ -1258,8 +1282,4 @@ def access_data():
 
 
 if __name__ == "__main__":
-    # Start background watcher for incidents
-    t = threading.Thread(target=incident_watch, daemon=True)
-    t.start()
-    # Requires cert.pem and key.pem for TLS
-    app.run(host="0.0.0.0", port=8443, ssl_context=("cert.pem", "key.pem"))
+    main()
