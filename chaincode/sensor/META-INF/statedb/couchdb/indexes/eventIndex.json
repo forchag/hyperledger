@@ -1,0 +1,8 @@
+{
+  "index": {
+    "fields": ["device_id", "ts"]
+  },
+  "ddoc": "eventDeviceTsIndex",
+  "name": "eventDeviceTsIndex",
+  "type": "json"
+}
