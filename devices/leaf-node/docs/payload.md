@@ -7,7 +7,7 @@ following JSON structure:
 {
   "device_id": "<string>",
   "seq": <integer>,
-  "window_id": <integer>,
+  "window_id": [<start_ts>, <end_ts>],
   "stats": {
     "min": <number>,
     "avg": <number>,
@@ -16,6 +16,7 @@ following JSON structure:
     "count": <integer>
   },
   "last_ts": <integer>,
+  "tail": [<number>, ...],
   "sensor_set": ["<sensor id>", ...],
   "urgent": <boolean>,
   "crt": {
@@ -28,9 +29,11 @@ following JSON structure:
 
 * `device_id` – unique identifier for the ESP32 leaf node.
 * `seq` – monotonically increasing sequence number used for deduplication.
-* `window_id` – identifier for the aggregation window.
+* `window_id` – `[start_ts, end_ts]` pair identifying the aggregation window
+  aligned to the configured uplink period.
 * `stats` – windowed statistics for the sensor readings.
 * `last_ts` – epoch timestamp of the most recent sample in the window.
+* `tail` – optional raw tail of recent readings for diagnostics.
 * `sensor_set` – list of sensors included in the payload.
 * `urgent` – signals that the payload contains threshold breaches and should
   be processed immediately.
