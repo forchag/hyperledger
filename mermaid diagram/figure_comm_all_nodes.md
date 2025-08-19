@@ -67,14 +67,14 @@ sequenceDiagram
     Note over ESP32,PI: HMAC or Ed25519 signature. Optional CRT residues at leaf.
 
     PI->>INGRESS: Forward payload (local)
-    INGRESS->>INGRESS: Verify signature, dedupe by device and sequence, reconstruct CRT via Garner if present
+    INGRESS->>INGRESS: Verify signature; dedupe by device and sequence; reconstruct CRT via Garner if present
     INGRESS->>BUNDLER: NormalizedReading
 
     alt Periodic window
         BUNDLER->>SCHED: Interval bundle (window 30-120 min)
         SCHED->>MESH: Submit bundle on cadence (gRPC over TLS tunneled via WireGuard)
     else Event flow
-        BUNDLER->>SCHED: Event bundle (coalesce 60-120 s, rate limit)
+        BUNDLER->>SCHED: Event bundle (coalesce 60-120 s; rate limit)
         SCHED->>MESH: Submit bundle immediately (gRPC over TLS)
     end
 
@@ -91,7 +91,12 @@ sequenceDiagram
     ALERTS->>OP: Notify via email or webhook
     DASH->>OP: Visualization and drilldowns
 
-    Note over SCHED,PEERS: After submit, wait for commit event; do read-back verification of one key; log submit to commit latency.
+    Note over SCHED,PEERS
+      After submit, wait for commit event
+      Do read-back verification of one key
+      Log submit to commit latency
+    end note
+
 
 ```
 ## End-to-end sequence (periodic and event flows)
