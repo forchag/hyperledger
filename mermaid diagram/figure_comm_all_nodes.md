@@ -99,6 +99,7 @@ sequenceDiagram
       Log submit to commit latency
     end note
 
+
 ```
 ## End-to-end sequence (periodic and event flows)
 
