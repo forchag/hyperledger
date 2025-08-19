@@ -28,13 +28,13 @@ flowchart LR
 
 ```mermaid
 graph LR
-    L_read[L_read\nsensor sampling]
-    L_wifi[L_wifi\n10–20 ms\ntransmit over Wi-Fi]
-    L_ingress[L_ingress\npacket processing]
-    L_bundle[L_bundle_wait\n30–120 min periodic\n≈0 event (60–120 s coalesce)]
-    L_sched[L_scheduler\nscheduling latency]
-    L_mesh[L_mesh\nmesh hop latency]
-    L_sc[L_submit→commit\n1–2 s (2 Pis)\n3–5 s (20 Pis)\n10–15 s (100 Pis)]
+    L_read[L_read<br/>sensor sampling]
+    L_wifi[L_wifi<br/>10-20 ms<br/>transmit over Wi-Fi]
+    L_ingress[L_ingress<br/>packet processing]
+    L_bundle[L_bundle_wait<br/>30-120 min periodic<br/>~0 event (60-120 s coalesce)]
+    L_sched[L_scheduler<br/>scheduling latency]
+    L_mesh[L_mesh<br/>mesh hop latency]
+    L_sc[L_submit->commit<br/>1-2 s (2 Pis)<br/>3-5 s (20 Pis)<br/>10-15 s (100 Pis)]
     L_total[Latency_total]
 
     L_read --> L_wifi --> L_ingress --> L_bundle --> L_sched --> L_mesh --> L_sc --> L_total
