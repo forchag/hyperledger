@@ -93,11 +93,12 @@ sequenceDiagram
     ALERTS->>OP: Notify via email or webhook
     DASH->>OP: Visualization and drilldowns
 
-    Note over SCHED,PEERS
+    Note over SCHED,PEERS:
       After submit, wait for commit event
       Do read-back verification of one key
       Log submit to commit latency
     end note
+
 
 
 ```
