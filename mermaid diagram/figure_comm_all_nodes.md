@@ -92,6 +92,8 @@ sequenceDiagram
     DASH->>OP: Visualization and drilldowns
 
     Note over SCHED,PEERS: After submit, wait for commit event; do read-back verification of one key; log submit_to_commit latency.
+```
+## End-to-end sequence (periodic and event flows)
 
 **What is transmitted**
 
