@@ -31,7 +31,7 @@ graph LR
     L_read[L_read<br/>sensor sampling]
     L_wifi[L_wifi<br/>10-20 ms<br/>transmit over Wi-Fi]
     L_ingress[L_ingress<br/>packet processing]
-    L_bundle[L_bundle_wait<br/>30-120 min periodic<br/>~0 event (60-120 s coalesce)]
+    L_bundle[L_bundle_wait<br/>30-120 min periodic<br/>approx 0 events, coalesce 60-120 s]
     L_sched[L_scheduler<br/>scheduling latency]
     L_mesh[L_mesh<br/>mesh hop latency]
     L_sc[L_submit->commit<br/>1-2 s (2 Pis)<br/>3-5 s (20 Pis)<br/>10-15 s (100 Pis)]
