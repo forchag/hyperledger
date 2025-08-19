@@ -41,6 +41,57 @@ sequenceDiagram
     ALERTS-->>OP: notify
     DASH-->>OP: visualize metrics
 ```
+## End-to-end sequence (periodic and event flows)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant ESP32 as ESP32 Node
+    participant PI as Pi (Wi-Fi AP)
+    participant INGRESS as IngressService
+    participant BUNDLER as Bundler
+    participant SCHED as Scheduler
+    participant MESH as Mesh (BATMAN-adv + WireGuard)
+    participant ORDERER as Fabric Orderer (Raft)
+    participant PEERS as Fabric Peers
+    participant CC as Chaincode
+    participant METRICS as Metrics Exporter
+    participant PROM as Prometheus
+    participant DASH as Dashboard
+    participant ALERTS as Alertmanager
+    participant OP as Operator
+
+    Note over ESP32: Sample sensors every 1-5 min. Detect thresholds and delta-rate events. Maintain monotonic seq.
+    ESP32->>PI: Leaf payload {device_id, seq, window_id, stats, last_ts, sensor_set, urgent, [crt?], sig}<br/>Wi-Fi WPA2/3
+    PI-->>ESP32: ACK or keepalive (optional commands)
+    Note over ESP32,PI: HMAC or Ed25519 signature. Optional CRT residues at leaf.
+
+    PI->>INGRESS: Forward payload (local)
+    INGRESS->>INGRESS: Verify signature, dedupe (device_id, seq), reconstruct CRT (Garner) if present
+    INGRESS->>BUNDLER: NormalizedReading
+
+    alt Periodic window
+        BUNDLER->>SCHED: Interval bundle (window 30-120 min)
+        SCHED->>MESH: Submit bundle on cadence (gRPC over TLS, tunneled via WireGuard)
+    else Event flow
+        BUNDLER->>SCHED: Event bundle (coalesce 60-120 s, rate limit)
+        SCHED->>MESH: Submit bundle immediately (gRPC over TLS)
+    end
+
+    Note over MESH: L2 routing via BATMAN-adv on bat0. 2-5 ms per hop. Tens of Mbps with WokFi links.
+    MESH->>ORDERER: Fabric envelope to orderer cluster (Raft)
+    ORDERER->>PEERS: Ordered block broadcast
+    PEERS->>CC: Endorse-validate-commit (chaincode invoked)
+    CC-->>PEERS: Chaincode events emitted
+
+    PEERS->>METRICS: Increment counters and gauges on commit
+    METRICS->>PROM: Expose /metrics for scraping (HTTP pull)
+    PROM->>DASH: Render graphs and tables (15s scrape)
+    PROM->>ALERTS: Fire alerts on rules (latency, backlog, health)
+    ALERTS->>OP: Notify (email or webhook)
+    DASH->>OP: Visualization and drilldowns
+
+    Note over SCHED,PEERS: After submit, wait for commit event; do read-back verification of one key; log submit_to_commit latency.
 
 **What is transmitted**
 
