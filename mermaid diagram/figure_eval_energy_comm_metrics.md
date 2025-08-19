@@ -34,10 +34,11 @@ graph LR
     L_bundle[L_bundle_wait<br/>30-120 min periodic<br/>approx 0 events, coalesce 60-120 s]
     L_sched[L_scheduler<br/>scheduling latency]
     L_mesh[L_mesh<br/>mesh hop latency]
-    L_sc[L_submit->commit<br/>1-2 s (2 Pis)<br/>3-5 s (20 Pis)<br/>10-15 s (100 Pis)]
+    L_sc[L_submit_to_commit<br/>1-2 s at 2 Pis<br/>3-5 s at 20 Pis<br/>10-15 s at 100 Pis]
     L_total[Latency_total]
 
     L_read --> L_wifi --> L_ingress --> L_bundle --> L_sched --> L_mesh --> L_sc --> L_total
+
 ```
 
 ## Part C — Energy Budgets
