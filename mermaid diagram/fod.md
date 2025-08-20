@@ -47,17 +47,17 @@ flowchart LR
     L_read[L_read\nsensor sampling and encode]:::box
     L_wifi[L_wifi\nWi-Fi uplink 10-50 ms typical]:::box
     L_ingress[L_ingress\nparse, verify sig, dedupe, CRT reconstruct]:::box
-    L_bundle[L_bundle_wait\nperiodic: 30-120 min\nevents: ~0 (coalesce 60-120 s)]:::box
+    L_bundle[L_bundle_wait\nperiodic: 30-120 min\nevents: approx zero; coalesce 60-120 s]:::box
     L_sched[L_sched\nscheduler queue and backoff]:::box
-    L_mesh[L_mesh\n2-5 ms per hop (WokFi BATMAN-adv)]:::box
+    L_mesh[L_mesh\n2-5 ms per hop WokFi BATMAN-adv]:::box
     L_sc[L_submit_to_commit\n2 Pis: 1-2 s\n20 Pis: 3-5 s\n100 Pis: 10-15 s]:::box
     L_total[Latency_total]:::box
 
     L_read --> L_wifi --> L_ingress --> L_bundle --> L_sched --> L_mesh --> L_sc --> L_total
 
-    N["Guidance:\n- Periodic mode dominated by L_bundle_wait.\n- Event mode dominated by L_submit_to_commit.\n- Keep coalesce small for faster event visibility.\n- Mesh hop count increases variance in L_mesh."]:::note
+    N["Guidance:\nPeriodic mode dominated by L_bundle_wait.\nEvent mode dominated by L_submit_to_commit.\nKeep coalesce small for faster event visibility.\nMesh hop count increases variance in L_mesh."]:::note
     L_mesh -.-> N
-```
+
 
 ---
 
