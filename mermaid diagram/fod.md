@@ -207,8 +207,7 @@ Adjust currents and durations per your exact hardware and configuration.
 * CRT and modular arithmetic: see `docs/crt.md`
 * Architecture reference: `figure1_three_tier_system_architecture.md`
 
-````markdown
----
+
 
 ## Part G — Periodic vs Event timing (block formation behavior)
 
