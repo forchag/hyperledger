@@ -60,36 +60,39 @@ sequenceDiagram
     participant ALERTS as Alertmanager
     participant OP as Operator
 
-    Note over ESP32: Sample sensors every 1-5 min; detect thresholds and delta-rate events; keep monotonic seq
+    ESP32->>ESP32: Sample sensors every 1-5 min\nDetect thresholds and delta rate events\nMaintain monotonic sequence
     ESP32-->>PI: Leaf payload (device_id, seq, window_id, stats, last_ts, sensor_set, urgent, crt optional, sig)\nWi-Fi WPA2/3
     PI-->>ESP32: ACK / keepalive / command
-    Note over ESP32,PI: HMAC or Ed25519 signature; optional CRT residues at leaf
+    PI->>PI: HMAC or Ed25519 signature\nOptional CRT residues at leaf
 
     PI-->>INGRESS: forward payload (local)
-    INGRESS-->>BUNDLER: verify signature & dedupe (device_id, seq)\nreconstruct CRT via Garner if present\nemit NormalizedReading
+    INGRESS->>INGRESS: Verify signature
+    INGRESS->>INGRESS: Dedupe by device_id and seq
+    INGRESS->>INGRESS: Reconstruct CRT via Garner if present
+    INGRESS-->>BUNDLER: NormalizedReading
 
     alt Periodic window
-        BUNDLER-->>SCHED: interval bundle\nwindow 30–120 min
+        BUNDLER-->>SCHED: interval bundle\nwindow 30-120 min
         SCHED-->>MESH: submit on cadence\ngRPC over TLS via WireGuard
     else Event flow
-        BUNDLER-->>SCHED: event bundle\ncoalesce 60–120 s; rate limit
+        BUNDLER-->>SCHED: event bundle\ncoalesce 60-120 s; rate limit
         SCHED-->>MESH: submit immediately\ngRPC over TLS
     end
 
-    Note over MESH: L2 mesh routing on bat0; 2–5 ms per hop; WokFi links
+    MESH->>MESH: L2 mesh routing on bat0\n2-5 ms per hop\nWokFi links
     MESH-->>ORDERER: Fabric envelope to orderer cluster (Raft)
     ORDERER-->>PEERS: ordered block broadcast
     PEERS-->>CC: endorse / validate / commit (invoke)
     CC-->>PEERS: chaincode events
 
     PEERS-->>METRICS: increment counters and gauges on commit
-    METRICS-->>PROM: expose /metrics (HTTP pull)
-    PROM-->>DASH: render graphs and tables\n15 s scrape
+    METRICS-->>PROM: expose metrics endpoint (HTTP pull)
+    PROM-->>DASH: render graphs and tables\n15s scrape
     PROM-->>ALERTS: fire alerts on rules\nlatency / backlog / health
     ALERTS-->>OP: notify (email or webhook)
     DASH-->>OP: visualize and drill down
 
-    Note over SCHED: After submit, wait for commit; verify one key; log submit_to_commit latency
+    SCHED->>SCHED: After submit wait for commit\nRead back verify one key\nLog submit_to_commit latency
 
 ```
 ## End-to-end sequence (periodic and event flows)
