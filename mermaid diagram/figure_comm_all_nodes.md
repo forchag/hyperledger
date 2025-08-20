@@ -45,62 +45,51 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    autonumber
     participant ESP32 as ESP32 Node
-    participant PI as Pi Wi-Fi AP
+    participant PI as Pi (Wi-Fi AP)
     participant INGRESS as IngressService
     participant BUNDLER as Bundler
     participant SCHED as Scheduler
-    participant MESH as Mesh BATMAN-adv and WireGuard
-    participant ORDERER as Fabric Orderer Raft
+    participant MESH as Mesh (BATMAN-adv/WireGuard)
+    participant ORDERER as Fabric Orderer (Raft)
     participant PEERS as Fabric Peers
     participant CC as Chaincode
     participant METRICS as Metrics Exporter
     participant PROM as Prometheus
-    participant DASH as Dashboard
+    participant DASH as Dashboard/Explorer
     participant ALERTS as Alertmanager
     participant OP as Operator
 
-    Note over ESP32: Sample sensors every 1-5 min. Detect thresholds and delta-rate events. Maintain monotonic sequence.
-    ESP32->>PI: Leaf payload (device_id, seq, window_id, stats, last_ts, sensor_set, urgent, crt optional, sig)\nWi-Fi WPA2/3
-    PI-->>ESP32: ACK or keepalive (optional commands)
-    Note over ESP32,PI: HMAC or Ed25519 signature. Optional CRT residues at leaf.
+    Note over ESP32: Sample sensors every 1-5 min; detect thresholds and delta-rate events; keep monotonic seq
+    ESP32-->>PI: Leaf payload (device_id, seq, window_id, stats, last_ts, sensor_set, urgent, crt optional, sig)\nWi-Fi WPA2/3
+    PI-->>ESP32: ACK / keepalive / command
+    Note over ESP32,PI: HMAC or Ed25519 signature; optional CRT residues at leaf
 
-    PI->>INGRESS: Forward payload (local)
-    INGRESS->>INGRESS: Verify signature
-    INGRESS->>INGRESS: Dedupe by device and sequence
-    INGRESS->>INGRESS: Reconstruct CRT via Garner if present
-    INGRESS->>BUNDLER: NormalizedReading
+    PI-->>INGRESS: forward payload (local)
+    INGRESS-->>BUNDLER: verify signature & dedupe (device_id, seq)\nreconstruct CRT via Garner if present\nemit NormalizedReading
 
     alt Periodic window
-        BUNDLER->>SCHED: Interval bundle (window 30-120 min)
-        SCHED->>MESH: Submit bundle on cadence (gRPC over TLS tunneled via WireGuard)
+        BUNDLER-->>SCHED: interval bundle\nwindow 30–120 min
+        SCHED-->>MESH: submit on cadence\ngRPC over TLS via WireGuard
     else Event flow
-        BUNDLER->>SCHED: Event bundle (coalesce 60-120 s, rate limit)
-        SCHED->>MESH: Submit bundle immediately (gRPC over TLS)
+        BUNDLER-->>SCHED: event bundle\ncoalesce 60–120 s; rate limit
+        SCHED-->>MESH: submit immediately\ngRPC over TLS
     end
 
-    Note over MESH: L2 routing via BATMAN-adv on bat0. 2-5 ms per hop. Tens of Mbps with WokFi links.
-    MESH->>ORDERER: Fabric envelope to orderer cluster (Raft)
-    ORDERER->>PEERS: Ordered block broadcast
-    PEERS->>CC: Endorse validate commit (chaincode invoked)
-    CC-->>PEERS: Chaincode events emitted
+    Note over MESH: L2 mesh routing on bat0; 2–5 ms per hop; WokFi links
+    MESH-->>ORDERER: Fabric envelope to orderer cluster (Raft)
+    ORDERER-->>PEERS: ordered block broadcast
+    PEERS-->>CC: endorse / validate / commit (invoke)
+    CC-->>PEERS: chaincode events
 
-    PEERS->>METRICS: Increment counters and gauges on commit
-    METRICS->>PROM: Expose metrics endpoint for scraping (HTTP pull)
-    PROM->>DASH: Render graphs and tables (15 s scrape)
-    PROM->>ALERTS: Fire alerts on rules (latency, backlog, health)
-    ALERTS->>OP: Notify via email or webhook
-    DASH->>OP: Visualization and drilldowns
+    PEERS-->>METRICS: increment counters and gauges on commit
+    METRICS-->>PROM: expose /metrics (HTTP pull)
+    PROM-->>DASH: render graphs and tables\n15 s scrape
+    PROM-->>ALERTS: fire alerts on rules\nlatency / backlog / health
+    ALERTS-->>OP: notify (email or webhook)
+    DASH-->>OP: visualize and drill down
 
-    Note over ESP32,OP:
-      After submit, wait for commit event
-      Do read-back verification of one key
-      Log submit to commit latency
-    end note
-
-
-
+    Note over SCHED: After submit, wait for commit; verify one key; log submit_to_commit latency
 
 ```
 ## End-to-end sequence (periodic and event flows)
