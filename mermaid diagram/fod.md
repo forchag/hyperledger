@@ -57,7 +57,7 @@ flowchart LR
 
     N["Guidance:\nPeriodic mode dominated by L_bundle_wait.\nEvent mode dominated by L_submit_to_commit.\nKeep coalesce small for faster event visibility.\nMesh hop count increases variance in L_mesh."]:::note
     L_mesh -.-> N
-
+````
 
 ---
 
