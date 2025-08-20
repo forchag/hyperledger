@@ -217,29 +217,30 @@ sequenceDiagram
     autonumber
     participant ESP32 as ESP32 leaf
     participant PI as Pi gateway
-    participant BUNDLER as Bundler/Scheduler
+    participant BUNDLER as Bundler and Scheduler
     participant ORDER as Fabric orderer
     participant PEER as Fabric peers
 
     Note over ESP32: Periodic window mode
-    ESP32->>PI: periodic summary payload (window close)
-    PI->>BUNDLER: add to IntervalBundle
-    BUNDLER->>BUNDLER: wait until cadence (30-120 min)
-    BUNDLER->>ORDER: submit IntervalBundle
+    ESP32->>PI: periodic summary payload at window close
+    PI->>BUNDLER: add to interval bundle
+    BUNDLER->>BUNDLER: wait until cadence 30 to 120 min
+    BUNDLER->>ORDER: submit interval bundle
     ORDER-->>PEER: cut and broadcast block
-    PEER-->>BUNDLER: commit event; read-back verify
-    Note over BUNDLER: submit_to_commit 1-15 s (cluster size dependent)
+    PEER-->>BUNDLER: commit event then read back verify
+    Note over BUNDLER: submit to commit about 1 to 15 s
 
-    par Event path (independent of cadence)
-        Note over ESP32: Event detection (threshold / delta rate)
-        ESP32->>PI: urgent=true payload (coalesce 60-120 s)
-        PI->>BUNDLER: add to EventBundle
-        BUNDLER->>ORDER: submit EventBundle immediately
-        ORDER-->>PEER: block cut now (BatchTimeout small)
-        PEER-->>BUNDLER: commit; notify dashboard
-    and Periodic continues
-        BUNDLER->>BUNDLER: interval bundling unaffected
+    opt Event path
+        Note over ESP32: Event detection by threshold or delta rate
+        ESP32->>PI: urgent true payload coalesce 60 to 120 s
+        PI->>BUNDLER: add to event bundle
+        BUNDLER->>ORDER: submit event bundle immediately
+        ORDER-->>PEER: block cut immediate
+        PEER-->>BUNDLER: commit and notify dashboard
     end
+
+    Note over BUNDLER: interval bundling continues independently
+
 ````
 
 **Key points**
