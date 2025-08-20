@@ -1,22 +1,14 @@
-Here's the corrected and complete architecture documentation in a GitHub-compatible markdown file:
-
-
 # Figure 1 — Five-Tier System Architecture (ESP32 → Pi → Mesh → Fabric → Observability)
+
+This figure shows how sensor data travels from field devices to the blockchain and monitoring tools.
+The design is divided into five tiers, each highlighted with a different color in the diagram below.
 
 Related Figures:
 - [Full Communication Scheme (ESP32 ↔ Pi ↔ Mesh ↔ Fabric ↔ Observability)](figure_comm_all_nodes.md)
 - [Evaluation: Energy & Communications Metrics (ESP32 + Pi + Mesh + Fabric)](figure_eval_energy_comm_metrics.md)
 
-This document is a **drop-in replacement** for the previous three-tier figure.  
-It introduces a **five-tier, color-separated** design and embeds **what/how/when** for every hop, plus **block size**, **consensus (Raft)**, **Merkle tree**, and **CRT/modular arithmetic** call-outs.
-
-> **Ledger cadence:** periodic blocks every **30–120 min** (configurable) **and** event-triggered blocks (immediate).  
+> **Ledger cadence:** periodic blocks every **30–120 min** (configurable) **and** event-triggered blocks (immediate).
 > **Scope:** self-contained farm network (no external connectivity required).
-
-
-I've identified and fixed the Mermaid syntax error in your architecture diagram. The issue was with the `&` character in the ESP32 node text - it needs to be escaped as `&amp;` in Mermaid diagrams. Here's the corrected version:
-
-
 
 ## Architecture Diagram
 
@@ -161,33 +153,28 @@ flowchart TB
 
 ---
 
-## Tier Descriptions (Deep Dive)
+## Understanding the Five Tiers
 
-**Tier 1 — ESP32 + Sensors (Leaf Intelligence)**  
-- **Responsibilities**: Sample sensors, compute rolling stats per window, detect threshold/Δ-rate events, sign payloads, uplink  
-- **Inputs → Outputs**: Raw sensor values → {device_id, seq, window_id, stats, last_ts, urgent, [crt], sig} (≤ ~100 B)  
-- **Timing**: Sampling 1–5 min; periodic uplink every 10–15 min or at window close; events immediately  
-- **Resilience**: Ring-buffer + store-and-forward; monotonic seq prevents duplicates  
+1. **Tier 1 – ESP32 and Sensors**
+   - Reads local sensors every few minutes.
+   - Builds small packets with statistics and optional event flags.
+   - Sends packets to the nearest Raspberry Pi gateway.
 
-**Tier 2 — Raspberry Pi Gateway (Ingest • Verify • Bundle • Schedule)**  
-- **Responsibilities**: Verify signatures, dedupe, recombine CRT, bundle into Interval/Event, persist queue, schedule submissions  
-- **Outputs**: IntervalBundle (30–120 min cadence) and EventBundle (coalesce 60–120 s, rate-limited)  
-- **Resilience**: Durable queue + exponential backoff; no data loss during Fabric outages  
+2. **Tier 2 – Raspberry Pi Gateway**
+   - Verifies packets, removes duplicates, and groups data into bundles.
+   - Stores bundles and forwards them on a schedule or immediately for events.
 
-**Tier 3 — Mesh Network (WokFi + BATMAN-adv)**  
-- **Responsibilities**: Self-healing L2 mesh (bat0) for Fabric traffic; monitor neighbors/ETX; secure with WPA2/3 + WireGuard overlay  
-- **Performance**: ~2–5 ms/hop latency, tens of Mbps throughput  
+3. **Tier 3 – Mesh Network**
+   - Raspberry Pis forward bundles across a self-forming Wi‑Fi mesh.
+   - The mesh reroutes around failures and adds only a few milliseconds per hop.
 
-**Tier 4 — Blockchain (Hyperledger Fabric)**  
-- **Consensus**: Raft (1–3 orderers)  
-- **Keys & Guards**: reading:device_id:window_id, event:device_id:ts, last_seq:device_id, idempotency, CouchDB indexes  
-- **Blocks**: Typical block ≈ ~100 kB summaries; PreferredMaxBytes ≈ 1 MB; Merkle tree over tx set; header {prev_hash, merkle_root, ts}  
-- **Policy**: Periodic (every 30–120 min) and Event-triggered (immediate). Submit→commit ≈ 1–15 s depending on cluster size  
+4. **Tier 4 – Hyperledger Fabric**
+   - Bundles become transactions on the blockchain.
+   - Fabric orders them into blocks and keeps a searchable ledger of summaries.
 
-**Tier 5 — Observability & Ops**  
-- **Health**: /healthz (mesh+pipeline), /readyz (recent commit)  
-- **Metrics**: Prometheus counters/gauges — ingress_packets_total, duplicates_total, bundles_submitted_total{type}, submit_commit_seconds, mesh_neighbors, store_backlog_files, events_rate_limited_total  
-- **Dashboards**: Periodic state + event timeline  
+5. **Tier 5 – Observability and Operations**
+   - Health checks and dashboards show system status and recent activity.
+   - Prometheus metrics track packet counts, latency, and system load.
 
 ---
 
