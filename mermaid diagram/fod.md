@@ -2,7 +2,7 @@
 
 Related: [Five-Tier System Architecture](figure1_three_tier_system_architecture.md)
 
-This file refines the metrics topology, latency pipeline, and energy budgets with realistic ranges and clear assumptions. Diagrams are ASCII-only so GitHub Mermaid renders cleanly.
+This document explains how the system measures performance and energy use. It outlines the metrics path, the latency at each step, and typical power consumption. Diagrams use plain ASCII so they render well on GitHub.
 
 ---
 
@@ -32,11 +32,14 @@ flowchart LR
     ESP32 -.-> NOTEA
 
 ````
+The flow starts at the ESP32, moves through the Pi gateway and mesh, and ends at the blockchain and monitoring stack. Each box shows example Prometheus metrics collected at that stage.
+
 
 ---
 
 ## Part B — Latency Pipeline
 
+Total latency is the sum of the following components:
 `Latency_total = L_read + L_wifi + L_ingress + L_bundle_wait + L_sched + L_mesh + L_submit_to_commit`
 
 ```mermaid
@@ -58,12 +61,14 @@ flowchart LR
     N["Guidance:\nPeriodic mode dominated by L_bundle_wait.\nEvent mode dominated by L_submit_to_commit.\nKeep coalesce small for faster event visibility.\nMesh hop count increases variance in L_mesh."]:::note
     L_mesh -.-> N
 ````
+These delays add up to the time it takes for a reading to appear on-chain. Periodic data is dominated by bundling delay, while event data is limited mostly by blockchain commit time.
+
 
 ---
 
 ## Part C — Energy Budgets (realistic ranges)
 
-Assumptions below are representative. Adjust currents and duty cycles to your exact hardware and firmware. Use formulas to recompute totals.
+The values below are examples. Adjust currents and duty cycles for your hardware, then recompute totals with the formulas.
 
 ### C1. ESP32 leaf node (Wi-Fi uplink)
 
