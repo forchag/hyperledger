@@ -46,11 +46,14 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant ESP32 as ESP32 Node
-    participant PI as Pi Wi-Fi AP
+    participant PI as Pi WiFi AP
     participant INGRESS as IngressService
+    participant VERIFY as VerifySig
+    participant DEDUPE as Dedupe
+    participant CRT as CRTRecombine
     participant BUNDLER as Bundler
     participant SCHED as Scheduler
-    participant MESH as Mesh BATMAN-adv/WireGuard
+    participant MESH as Mesh BATMAN adv WireGuard
     participant ORDERER as Fabric Orderer Raft
     participant PEERS as Fabric Peers
     participant CC as Chaincode
@@ -60,30 +63,34 @@ sequenceDiagram
     participant ALERTS as Alertmanager
     participant OP as Operator
 
-    ESP32-->>PI: Leaf payload
+    ESP32-->>PI: Leaf payload with stats and signature
     PI-->>ESP32: ACK or keepalive
     PI-->>INGRESS: Forward payload
-    INGRESS-->>BUNDLER: Normalized reading
+    INGRESS-->>VERIFY: Verify signature
+    VERIFY-->>DEDUPE: Dedupe by device id and seq
+    DEDUPE-->>CRT: Recombine CRT if present
+    CRT-->>BUNDLER: Normalized reading
 
     alt Periodic window
-        BUNDLER-->>SCHED: Interval bundle
-        SCHED-->>MESH: Submit on cadence
+        BUNDLER-->>SCHED: Interval bundle window 30-120 min
+        SCHED-->>MESH: Submit on cadence grpc over tls
     else Event flow
-        BUNDLER-->>SCHED: Event bundle
-        SCHED-->>MESH: Submit immediately
+        BUNDLER-->>SCHED: Event bundle coalesce 60-120 s rate limit
+        SCHED-->>MESH: Submit immediately grpc over tls
     end
 
-    MESH-->>ORDERER: Envelope to orderer
+    MESH-->>ORDERER: Envelope to orderer cluster
     ORDERER-->>PEERS: Block broadcast
-    PEERS-->>CC: Invoke chaincode
+    PEERS-->>CC: Invoke chaincode endorse validate commit
     CC-->>PEERS: Chaincode events
 
-    PEERS-->>METRICS: Update metrics
-    METRICS-->>PROM: Expose metrics
-    PROM-->>DASH: Charts and tables
-    PROM-->>ALERTS: Alerts on rules
-    ALERTS-->>OP: Notify operator
-    DASH-->>OP: Visualization
+    PEERS-->>METRICS: Update commit metrics
+    METRICS-->>PROM: Expose metrics endpoint http pull
+    PROM-->>DASH: Charts and tables 15s scrape
+    PROM-->>ALERTS: Alerts on latency backlog health
+    ALERTS-->>OP: Notify operator email or webhook
+    DASH-->>OP: Visualization and drilldown
+
 
 ```
 ## End-to-end sequence (periodic and event flows)
