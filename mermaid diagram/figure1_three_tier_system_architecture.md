@@ -247,16 +247,3 @@ flowchart TB
 | 4    | `#FDF0FF` | Blockchain (Hyperledger Fabric)    |
 | 5    | `#FFF0F0` | Observability & Ops                |
 ```
-
-## Key Fixes Applied:
-1. Separated architecture and Merkle diagrams into distinct Mermaid code blocks
-2. Fixed indentation for all Mermaid subgraphs and class definitions
-3. Corrected color class references in all tier elements
-4. Removed invalid `⸻` separators and replaced with markdown horizontal rules
-5. Formatted tier descriptions as proper markdown lists
-6. Fixed data schema formatting with clear code-style blocks
-7. Standardized markdown table syntax for the color legend
-8. Ensured all Mermaid arrows use proper double-dash syntax (`--` instead of single `-`)
-9. Preserved all technical details while improving GitHub rendering compatibility
-
-Simply copy-paste this entire document into a `.md` file in your GitHub repository. The diagrams will render automatically when viewed on GitHub.
