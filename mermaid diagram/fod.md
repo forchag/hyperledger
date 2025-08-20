@@ -20,16 +20,17 @@ flowchart LR
 
     ESP32((ESP32)):::device
     INGRESS["Pi Ingress\nmetrics: ingress_packets_total, duplicates_total, drops_total, ingress_latency_seconds"]:::pi
-    BUNDLER["Bundler and Scheduler\nmetrics: bundles_submitted_total\\{type\\}, bundle_latency_seconds,\nstore_backlog_files, events_rate_limited_total"]:::pi
+    BUNDLER["Bundler and Scheduler\nmetrics: bundles_submitted_total&#123;type&#125;, bundle_latency_seconds,\nstore_backlog_files, events_rate_limited_total"]:::pi
     MESH["Mesh (BATMAN-adv)\nmetrics: mesh_neighbors, mesh_retries_total,\nmesh_etx_avg, mesh_rssi_avg"]:::network
     FABRIC["Fabric submit_to_commit path\nmetrics: submit_commit_seconds, tx_retry_total,\nendorsement_failures_total, block_bytes_total"]:::fabric
-    OBS["Observability (/metrics)\nmetrics: exporter_up, alert_events_total, scrape_duration_seconds"]:::observability
+    OBS["Observability metrics endpoint\nmetrics: exporter_up, alert_events_total, scrape_duration_seconds"]:::observability
 
     ESP32 --> INGRESS --> BUNDLER --> MESH --> FABRIC --> OBS
 
-    NOTEA[Notes:\n- ESP32 sends summaries (10-15 min) or event frames.\n- Bundler aligns to 30-120 min windows and coalesces events 60-120 s.\n- Mesh stats reflect path quality and stability.\n- Fabric metrics center on submit_to_commit latency and block size.\n- Observability surfaces health, alerts, and scrape timings.]:::data
+    NOTEA["Notes:\nESP32 sends summaries 10-15 min or event frames.\nBundler aligns to 30-120 min windows and coalesces events 60-120 s.\nMesh stats reflect path quality and stability.\nFabric metrics focus on submit_to_commit latency and block size.\nObservability surfaces health, alerts, and scrape timings."]:::data
 
     ESP32 -.-> NOTEA
+
 ````
 
 ---
