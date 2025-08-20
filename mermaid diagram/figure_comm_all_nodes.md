@@ -60,39 +60,43 @@ sequenceDiagram
     participant ALERTS as Alertmanager
     participant OP as Operator
 
-    ESP32->>ESP32: Sample sensors every 1-5 min\nDetect thresholds and delta rate events\nMaintain monotonic sequence
-    ESP32-->>PI: Leaf payload (device_id, seq, window_id, stats, last_ts, sensor_set, urgent, crt optional, sig)\nWi-Fi WPA2/3
+    ESP32->>ESP32: Sample every 1-5 min; detect thresholds; keep monotonic sequence
+    ESP32-->>PI: Leaf payload (device_id, seq, window_id, stats, last_ts, sensor_set, urgent, crt optional, sig)
     PI-->>ESP32: ACK / keepalive / command
-    PI->>PI: HMAC or Ed25519 signature\nOptional CRT residues at leaf
+    PI->>PI: HMAC or Ed25519 signature; optional CRT residues at leaf
 
     PI-->>INGRESS: forward payload (local)
-    INGRESS->>INGRESS: Verify signature
-    INGRESS->>INGRESS: Dedupe by device_id and seq
-    INGRESS->>INGRESS: Reconstruct CRT via Garner if present
+    INGRESS->>INGRESS: verify signature
+    INGRESS->>INGRESS: dedupe by device_id and seq
+    INGRESS->>INGRESS: reconstruct CRT via Garner if present
     INGRESS-->>BUNDLER: NormalizedReading
 
     alt Periodic window
-        BUNDLER-->>SCHED: interval bundle\nwindow 30-120 min
-        SCHED-->>MESH: submit on cadence\ngRPC over TLS via WireGuard
+        BUNDLER-->>SCHED: interval bundle
+        BUNDLER->>BUNDLER: window 30-120 min
+        SCHED-->>MESH: submit on cadence
+        MESH->>MESH: grpc over TLS via WireGuard
     else Event flow
-        BUNDLER-->>SCHED: event bundle\ncoalesce 60-120 s; rate limit
-        SCHED-->>MESH: submit immediately\ngRPC over TLS
+        BUNDLER-->>SCHED: event bundle
+        BUNDLER->>BUNDLER: coalesce 60-120 s; rate limit
+        SCHED-->>MESH: submit immediately
+        MESH->>MESH: grpc over TLS
     end
 
-    MESH->>MESH: L2 mesh routing on bat0\n2-5 ms per hop\nWokFi links
-    MESH-->>ORDERER: Fabric envelope to orderer cluster (Raft)
-    ORDERER-->>PEERS: ordered block broadcast
-    PEERS-->>CC: endorse / validate / commit (invoke)
+    MESH->>MESH: L2 mesh on bat0; 2-5 ms per hop; WokFi links
+    MESH-->>ORDERER: Fabric envelope to orderer cluster
+    ORDERER-->>PEERS: ordered block broadcast (Raft)
+    PEERS-->>CC: endorse / validate / commit
     CC-->>PEERS: chaincode events
 
     PEERS-->>METRICS: increment counters and gauges on commit
     METRICS-->>PROM: expose metrics endpoint (HTTP pull)
-    PROM-->>DASH: render graphs and tables\n15s scrape
-    PROM-->>ALERTS: fire alerts on rules\nlatency / backlog / health
+    PROM-->>DASH: render graphs and tables
+    PROM-->>ALERTS: fire alerts on rules
     ALERTS-->>OP: notify (email or webhook)
     DASH-->>OP: visualize and drill down
 
-    SCHED->>SCHED: After submit wait for commit\nRead back verify one key\nLog submit_to_commit latency
+    SCHED->>SCHED: after submit, wait for commit; read-back verify one key; log submit_to_commit latency
 
 ```
 ## End-to-end sequence (periodic and event flows)
