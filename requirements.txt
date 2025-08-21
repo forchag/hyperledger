@@ -4,3 +4,4 @@ numpy==2.3.2
 pytest==8.4.1
 requests==2.32.4
 prometheus-client==0.21.0
+Django==5.1.3

@@ -1,3 +1,7 @@
 chaincode/*/vendor/
 chaincode/*/*.out
 fabric-samples/
+
+__pycache__/
+*.py[cod]
+ndemaze/db.sqlite3
