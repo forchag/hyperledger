@@ -24,7 +24,7 @@ flowchart LR
   %% -------- TIER 1: ESP32 LEAVES --------
   subgraph T1["Tier 1 — ESP32 Leaves"]
     direction TB
-    L1["ESP32\n• sensor_set: temperature, soil_moisture, humidity, soil_ph, light_lux, battery_v, rssi_dbm\n• window stats: {min,avg,max,std,count}\n• flags: urgent\n• optional CRT: m[], r[]\n• sig: Ed25519/HMAC"]:::t1
+    L1["ESP32\n• sensor_set: temperature, soil_moisture, humidity, soil_ph, light_lux, battery_v, rssi_dbm\n• data: temp 25.7°C, moisture 24%, humidity 61%, pH 6.3, lux 2400, battery 3.81V, rssi -78dBm\n• window stats: {min,avg,max,std,count}\n• flags: urgent\n• optional CRT: m[], r[]\n• sig: Ed25519/HMAC"]:::t1
   end
 
   %% -------- TIER 2: PI GATEWAY (INGRESS → BUNDLER) --------
