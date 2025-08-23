@@ -87,6 +87,30 @@ flowchart LR
   classDef t5 fill:#fce4ec,stroke:#ad1457,color:#880e4f;
 ```
 
+### End-to-End Performance Levers & Trade-offs
+
+Latency budget (rule-of-thumb). Let \(H\) be mesh hops, \(t_h\) per-hop latency (ms), \(T_q\) Tier‑2 queueing/bundle time (histogram `bundle_latency_seconds`), \(T_b\) orderer BatchTimeout (s), and \(T_v\) peer validation/commit time. Then:
+
+\[
+T_{e2e} \approx T_q + H \cdot t_h + T_b + T_v
+\]
+
+Tune levers to keep \(T_{e2e}\) within SLO (see next section).
+
+What each lever changes:
+
+| Lever | You tune | Affects | Measure with | Where |
+| --- | --- | --- | --- | --- |
+| Cadence | 30–120 min windows | Storage vs freshness | `bundles_submitted_total{type}`, ledger growth/day | Tier 2→4 |
+| Event coalesce / rate-limit | 60–120 s, ≤6/h | Burst control, backlog | `events_rate_limited_total`, `store_backlog_files` | Tier 2 |
+| BatchTimeout | 2–5 s | Event commit delay, block size | `submit_commit_seconds` p95, block cuts/min | Tier 4 |
+| Orderers | 1 vs 3 | Fault tolerance, commit tails | `submit_commit_seconds` p99 under failure drills | Tier 4 |
+| Mesh hops | Node spacing, links | \(H \cdot t_h\) term, PDR | `per_hop_latency_ms`, `mesh_neighbors` | Tier 3 |
+| Bundle size | Window length, filters | Queue time \(T_q\), ledger/day | `bundle_latency_seconds`, on-chain bytes/day | Tier 2/4 |
+| CRT on leaf | Budget threshold + moduli set | Packet size, relay count/memory | payload bytes calc, success of Garner recombination | Tier 1/2 |
+
+Reviewer note. Tie back to thesis requirements: compare node count vs device memory and CRT moduli thresholds that achieve target QoS (low latency/delay) with measurements/plots referenced in your results chapter.
+
 ### How to read this (brief explanations)
 
 1. **Tier 1 → Tier 2:** Each ESP32 sends a window summary with an `urgent` flag and optional CRT residues. Tier 2 verifies, de-duplicates, stages, bundles, and computes a `merkle_root`.
