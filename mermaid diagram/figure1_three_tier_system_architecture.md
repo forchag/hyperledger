@@ -735,6 +735,31 @@ Each window is emitted as JSON:
 
 This canonical schema fixes field names, units and numeric ranges so downstream tiers can validate data without out-of-band agreements.
 
+#### Byte layout and CRT activation
+
+| Field                                   | Bytes | Notes                                   |
+|-----------------------------------------|------:|-----------------------------------------|
+| device_id + window_id + seq + last_ts   |   20 | identifiers and timing                   |
+| flags                                   |    1 | bitfield for QoS / alerting             |
+| stats (7 sensors × 5 stats × 2 B)       |   70 | 16‑bit min/avg/max/std/count per sensor |
+| signature (HMAC‑SHA256)                 |   32 | message authentication                   |
+| **Total (no CRT)**                      | **123** | exceeds 100 B target budget            |
+
+When the summed size crosses the 100 B budget, the node appends a `crt` object encoding large integers as residues:
+
+```json
+{
+  "device_id": "leaf-42",
+  "window_id": 123,
+  "timestamp": "2024-05-11T10:00:00Z",
+  "stats": { /* ... */ },
+  "crt": { "m": [97,101,103], "r": [43,52,60] },
+  "signature": "<ecdsa>"
+}
+```
+
+Each modulus/residue pair adds two bytes; choosing pairwise‑coprime moduli whose product spans the original value lets the Pi reconstruct canonical integers via the Chinese Remainder Theorem before bundling and Merkle hashing.
+
 ### Tier 2 — Bundle Schema
 The gateway aggregates window summaries into an IntervalBundle containing {S_j}_j=1…n. A Merkle tree h = hash(·) built over the summaries yields:
 
