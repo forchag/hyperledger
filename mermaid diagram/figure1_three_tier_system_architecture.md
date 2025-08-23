@@ -162,6 +162,67 @@ until a single root \(R\) remains. The inaugural root \(R_0\) seeds the ledger b
 
 ## Tier 2 (Pi Ingress & Bundler)
 
+Role. Tier 2 is the gateway that receives leaf packets, verifies and de-duplicates them, stages per time window, and assembles bundles for downstream commit. It submits bundles on a schedule and immediately for events.
+
+---
+
+1) **Ingress (verify → dedupe → stage)**
+- **Packet verification & identity.** Validate message structure and the device identity; verify HMAC/Ed25519 signatures using the device registry that maps `device_id → key_id`.
+- **De-duplication.** Drop repeats (e.g., using `device_id + seq/window_id` as an idempotency key) and keep a counter for duplicates; only clean, unique records proceed to staging.
+- **Window staging.** Organize valid readings by `window_id` into queues on disk so that the Bundler can efficiently build a periodic `IntervalBundle` for that window.
+
+*Ops/metrics exposure.* Gateways expose `/healthz`, `/readyz`, and `/metrics` so Tier 5 can scrape packet counts/latency/system load from Tier 2.
+
+---
+
+2) **Bundler (build → hash → forward)**
+
+Tier 2 produces two bundle types (define them concretely in the doc so they're unambiguous):
+
+- **IntervalBundle** — periodic summaries for a time window  
+  `bundle_id`, `window_id`, `readings[]`, `created_ts`, `count`, `merkle_root`
+- **EventBundle** — immediate submits for thresholded/urgent events  
+  `bundle_id`, `events[{device_id, ts, type, before[], after[], thresholds}]`, `created_ts`, `merkle_root`
+
+*Merkle root (bundle proof).* For each bundle, hash each item (reading/event), build the tree, and record the Merkle root inside the bundle. Tier 4 (Fabric) stores summary + `merkle_root`; later, any raw item can be proven with a Merkle path instead of storing all raw data on-chain.
+
+*Cadence & triggers.* The scheduler submits periodic bundles every 30–120 min, and event bundles immediately; this choice directly impacts end-to-end latency vs. storage trade-offs that should be justified with measurements/plots.
+
+*Failure handling (CRT edge cases).* When upstream uses CRT at Tier 1, recombine residues at the Pi via Garner’s algorithm; if some item can't be reconstructed, mark that record invalid (log reason) but continue others, and prefer canonical (recovered) values for Merkle hashing so proofs align with on-chain roots.
+
+---
+
+3) **On-chain mapping (how Tier 2 output is stored/indexed)**
+
+- **Key patterns.**
+  - `reading:device_id:window_id` → summary stats (+ proof hash/`merkle_root`)
+  - `event:device_id:ts` → event details  
+    Rationale: store summaries to keep the ledger compact; rely on Merkle proofs to recover/verify raw items when needed.
+- **Handoff to Tier 4.** Bundler acts as the client that submits transactions to Fabric; ordering/commit latency and block timing are governed in Consensus & Block Policy (Tier 4), which should be defined and justified (`BatchTimeout`, orderer count, latency bands).
+
+---
+
+4) **Mini data-flow**
+
+```mermaid
+flowchart LR
+  IN["Ingress\nverify | dedupe | stage by window_id"] --> Q[(Window queues)]
+  Q --> BND["Bundler\nbuild IntervalBundle/EventBundle"]
+  BND --> MR["Merkle Tree\ncompute merkle_root"]
+  MR --> OUT["Submit summary + merkle_root\nto Fabric (Tier 4)"]
+```
+
+---
+
+5) **Reviewer emphasis**
+
+- Clear Tier-2 responsibilities: verify, de-dup, stage, bundle, Merkle, forward.
+- Bundle schemas defined with `merkle_root` explicitly present.
+- Cadence is critical: periodic 30–120 min vs. immediate events → justify values with data (latency/storage trade-offs).
+- Architecture ↔ Merkle linkage shown (where the root is produced and how it's used on-chain).
+
+
+
 ## Tier 3 (Mesh/Link)
 
 ## Tier 4 (Hyperledger Fabric)
