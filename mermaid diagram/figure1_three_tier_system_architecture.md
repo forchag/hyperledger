@@ -16,40 +16,56 @@ Purpose & cadence. Tier 1 reads local sensors at a fixed interval (e.g., every f
 
 Coverage planning. The number of leaf nodes depends on farm surface area and radio range; using CRT can increase the need for secondary/relay nodes (processing/memory trade-offs).
 
+
 ```mermaid
 flowchart LR
-  subgraph Tier_1_ESP32_Leaf
-    direction TB
-    ESP32(("ESP32 Controller\nwindowed stats\n≤100B payload")):::device
+  subgraph Farm_Plot["ESP32 Plot (~500 m²)"]
+    direction LR
+    subgraph Tier_1_ESP32_Leaf
+      direction LR
+      ESP32(("ESP32 Controller\nwindowed stats\n≤100B payload")):::device
 
-    DHT22[["DHT22 Sensor\n• temperature_c\n• humidity_rh"]]:::sensor
-    SOIL[["Soil Moisture Probe\n• soil_moisture_vwc"]]:::sensor
-    PH[["pH Sensor\n• soil_ph"]]:::sensor
-    LIGHT[["Light Sensor\n• light_lux"]]:::sensor
-    WATER[["Water Level Sensor\n• water_level_cm"]]:::sensor
-    BAT[["Battery Monitor\n• battery_v"]]:::sensor
-    RSSI[["LoRa Radio\n• rssi_dbm"]]:::sensor
+      subgraph ENV["Environmental Sensors"]
+        direction TB
+        DHT22[["DHT22 Sensor"]]:::sensor
+        SOIL[["Soil Moisture Probe"]]:::sensor
+        PH[["pH Sensor"]]:::sensor
+        LIGHT[["Light Sensor"]]:::sensor
+        WATER[["Water Level Sensor"]]:::sensor
+      end
 
-    DHT22 --> ESP32
-    SOIL --> ESP32
-    PH --> ESP32
-    LIGHT --> ESP32
-    WATER --> ESP32
-    BAT --> ESP32
-    RSSI --> ESP32
+      subgraph SYS["System Monitors"]
+        direction TB
+        BAT[["Battery Monitor"]]:::battery
+        RSSI[["LoRa Radio"]]:::link
+      end
 
-    CRT_NOTE[CRT residues when\npayload > budget]:::note
-    COV[Coverage planning:\nFarm area ↔ Radio range ↔ Node count]:::note
+      DHT22 --> TEMP(("temperature_c")):::reading --> ESP32
+      DHT22 --> HUM(("humidity_rh")):::reading --> ESP32
+      SOIL --> MOIST(("soil_moisture_vwc")):::reading --> ESP32
+      PH --> PH_R(("soil_ph")):::reading --> ESP32
+      LIGHT --> LUX(("light_lux")):::reading --> ESP32
+      WATER --> LEVEL(("water_level_cm")):::reading --> ESP32
+      BAT --> VBAT(("battery_v")):::reading --> ESP32
+      RSSI --> RSSI_R(("rssi_dbm")):::reading --> ESP32
+    end
   end
 
   ESP32 -->|compact window| PI_GW["Raspberry Pi Gateway"]:::device
   ESP32 --- CRT_NOTE
   ESP32 --- COV
 
+  CRT_NOTE[CRT residues when\npayload > budget]:::note
+  COV[Coverage planning:\n~500 m² per ESP32\nFarm area ↔ Node count]:::note
+
   classDef device fill:#e0f7fa,stroke:#006064,color:#00363a;
   classDef sensor fill:#fff3e0,stroke:#ef6c00,color:#e65100;
+  classDef battery fill:#fffde7,stroke:#fbc02d,color:#f57f17;
+  classDef link fill:#e8eaf6,stroke:#303f9f,color:#1a237e;
+  classDef reading fill:#e0f2f1,stroke:#004d40,color:#00251a;
   classDef note fill:#eeeeee,stroke:#616161,color:#212121;
 ```
+
 
 ### Leaf → Pi Payload (with actual sensor data)
 
