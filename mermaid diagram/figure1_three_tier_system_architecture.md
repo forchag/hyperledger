@@ -334,5 +334,71 @@ flowchart TB
 
 ## Tier 4 (Hyperledger Fabric)
 
+```mermaid
+flowchart TB
+  %% ========= TIER 4: BLOCKCHAIN =========
+  subgraph T4["Tier 4 — Blockchain (Hyperledger Fabric)"]
+    direction TB
+
+    ORD["Orderer Cluster — Raft\n• ≤10 Pis → 1 orderer\n• ≥20 Pis → 3 orderers (odd, separate power)\n• BatchTimeout 2–5 s\n• MaxMessageCount 10–50\n• PreferredMaxBytes ~1–2 MB\n• AbsoluteMaxBytes 10 MB"]:::orderer
+
+    POL["Endorsement & ACLs\n• n-of-m orgs (e.g., 1-of-1 farm, or 2-of-3)\n• Only Bundler client app may submit\n• Channel policies for writes/queries"]:::policy
+
+    PEERS["Peers on Pis\n• Endorse → Validate (VSCC/ACL) → Commit (MVCC)\n• State DB: CouchDB\n• JSON indexes on device, window, ts"]:::peer
+
+    CC["Chaincode (Go/Node)\n• Put reading:device_id:window_id → {stats, last_ts, merkle_root, writer_msp}\n• Put event:device_id:ts → {type, before[], after[], thresholds, writer_msp}\n• Idempotency: last_seq:device_id guard"]:::cc
+
+    BLOCK["Block cutting & Ledger\n• Cut per BatchTimeout/size\n• Header: PreviousHash, DataHash (no Merkle tree)\n• Gossip to peers; commit to ledger+state"]:::block
+
+    METRICS["Ops & Metrics\n• Peer/Orderer metrics exposed\n• submit→commit latency (typical):\n  1–2 s (2 Pis), 3–5 s (20 Pis), 10–15 s (100 Pis)"]:::metrics
+
+    %% Flow
+    CC --> ORD --> BLOCK --> PEERS
+    POL --> PEERS
+    PEERS --> METRICS
+  end
+
+  %% Styles
+  classDef orderer fill:#e3f2fd,stroke:#1565c0,color:#0d47a1;
+  classDef peer fill:#e3f2fd,stroke:#1565c0,color:#0d47a1;
+  classDef cc fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20;
+  classDef block fill:#e3f2fd,stroke:#1565c0,color:#0d47a1;
+  classDef metrics fill:#fce4ec,stroke:#ad1457,color:#880e4f;
+  classDef policy fill:#ede7f6,stroke:#5e35b1,color:#311b92;
+```
+
+### Consensus & Block Policy
+
+- **Consensus:** Raft. **Sizing rule:** ≤10 Pis → **1 orderer**; ≥20 Pis → **3 orderers** (odd number, separate power domains). Tolerates a node failure while keeping quorum.
+- **Formation:** Scheduler submits **periodic bundles every 30–120 min**; **event bundles immediately**. Orderer cuts blocks by **BatchTimeout/size** (not instant). Keep **BatchTimeout small (2–5 s)** so events commit quickly while periodic cadence is dominated by windowing.
+- **Batching knobs:** Start with **MaxMessageCount 10–50**, **PreferredMaxBytes ~1–2 MB**, **AbsoluteMaxBytes 10 MB** (tune per throughput/link quality). Present measurement plots to justify.
+- **Latency targets:** **submit→commit** ≈ **1–2 s (2 Pis), 3–5 s (20 Pis), 10–15 s (100 Pis)**; validate with runs.
+
+### Chaincode & On-Chain Keys
+
+- `reading:device_id:window_id` → `{stats, last_ts, merkle_root, writer_msp}`
+- `event:device_id:ts` → `{type, before[], after[], thresholds, writer_msp}`
+- Store summaries plus **merkle_root** to keep ledger small; recover raw via Merkle proofs.
+- Idempotency via `last_seq:device_id` check to safely handle retries.
+
+### State DB & Query Performance
+
+- Use **CouchDB** for state. Create JSON indexes for common queries:
+  ```json
+  {"index":{"fields":["device_id","window_id"]},"name":"idx_device_window","type":"json"}
+  ```
+  ```json
+  {"index":{"fields":["device_id","ts"]},"name":"idx_device_ts","type":"json"}
+  ```
+  These support fast lookups like “show window X for device Y” and “events for device Y since T”.
+
+### Security & Access
+
+- **MSP & ACLs:** only the **Bundler client** identity can invoke `PutReading/PutEvent`. Readers get read-only. Rotate certs and enable TLS everywhere.
+
+### Observability
+
+- Export peer/orderer metrics and graph **submit→commit** and **block-cut** distributions under different cadences/sizes. Tie back to parameter justification to satisfy reviewer timing concerns.
+
 ## Tier 5 (Observability & Ops)
 
