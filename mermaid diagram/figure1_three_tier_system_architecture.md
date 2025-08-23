@@ -613,3 +613,74 @@ groups:
 * **Runbooks**: link each alert to a one-page fix guide (mesh degraded, backlog growing, Fabric slow, event storm).
 * **Readiness**: wire `/readyz` to **observed block height advancing** to avoid false-ready states.
 
+## Data Schemas and Leaf Sensor Data
+
+This section summarises the canonical data schemas used from the sensors up through observability and describes the raw measurements collected across the leaf field.
+
+### Tier 1 — Sensor Window Schema
+Each ESP32 leaf records a vector of readings
+x(t) = { T(t), M(t), H(t), pH(t), L(t), V(t), R(t) }
+for temperature T, soil moisture M, relative humidity H, soil pH, light intensity L, battery voltage V and RSSI R. Over a sampling window W the node reports:
+
+avg_s = (1/|W|) Σ_{t∈W} x_s(t)
+min_s = min_{t∈W} x_s(t)
+max_s = max_{t∈W} x_s(t)
+std_s = √[(1/|W|) Σ_{t∈W} (x_s(t) − avg_s)^2]
+count_s = |W|
+
+along with timestamp τ_W, signature and optional CRT residue pairs (m_i, r_i).
+
+### Tier 2 — Bundle Schema
+The gateway aggregates window summaries into an IntervalBundle containing {S_j}_j=1…n. A Merkle tree h = hash(·) built over the summaries yields:
+
+merkle_root = h( h(S_1) || ... || h(S_n) )
+
+Each bundle carries window_id, device_id, merkle_root, signature and any CRT residues for verification.
+
+### Tier 3 — Mesh Frame Schema
+Bundles traverse the mesh unchanged. Per hop i the latency is:
+
+ℓ_i = d_i / v_i
+
+so end‑to‑end delay becomes Σ_i ℓ_i. Packet loss probability after k hops is:
+
+1 − Π_{i=1}^k (1 − p_i)
+
+### Tier 4 — Ledger Schema
+Chaincode stores keys of the form:
+
+reading:device_id:window_id
+
+mapping to records {summary, merkle_root, writer_msp}. Blocks link by hash with:
+
+DataHash_n = h(BlockData_n),    PrevHash_n = h(Block_{n−1})
+
+### Tier 5 — Observability Schema
+Metrics endpoints expose counters c(t), gauges g(t) and histogram buckets H(t). Rates are derived via:
+
+rate(c) = (c(t₂) − c(t₁)) / (t₂ − t₁)
+
+### Actual sensor capture across the field
+A leaf field aggregates each node vector into a field matrix:
+
+X_field = [x₁, x₂, …, x_m]
+
+allowing spatial statistics such as mean temperature T̄ = (1/m) Σ_{j=1}^m T_j or moisture variance. These ground‑truth measurements calibrate agronomic models and drive automation decisions.
+
+### Sensor capture to blockchain ledger
+1. **Leaf sensing.** Each leaf computes the statistic tuple
+   \(S_s = (\text{min}_s,\text{avg}_s,\text{max}_s,\text{std}_s,\text{count}_s)\)
+   and signs the payload \(P = \text{Enc}(S_s,\text{ids},\tau_W)\).
+2. **Gateway bundling.** The Pi gateway verifies the signature, reconstitutes any CRT fields, and forms a bundle
+   \(B = \{P_1,\ldots,P_n, \text{merkle\_root}\}\) with
+   \(\text{merkle\_root} = H(H(P_1) \Vert \cdots \Vert H(P_n))\).
+3. **Fabric submission.** Tier‑3 transport delivers the bundle to Fabric where a transaction
+   \(T = \text{PutReading}(\text{device\_id},\text{window\_id},S_s,\text{merkle\_root})\)
+   is endorsed by peers and forwarded to the ordering service.
+4. **Block formation.** The orderer batches transactions and produces a block
+   \(B_k = (\text{PrevHash}_{k-1},\text{DataHash}_k,\text{txs})\)
+   where \(\text{DataHash}_k = H(T_1 \Vert \cdots \Vert T_m)\).
+5. **Ledger commit.** Peers validate \(B_k\), update state with
+   `reading:device_id:window_id → {summary, merkle_root, writer_msp}`,
+   and append \(B_k\) to the immutable ledger linking by
+   \(\text{PrevHash}_{k-1} = H(B_{k-1})\).
