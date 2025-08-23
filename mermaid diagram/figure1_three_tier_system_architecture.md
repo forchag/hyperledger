@@ -213,25 +213,31 @@ flowchart TB
     %% Ingress pipeline
     subgraph IN["Ingress"]
       direction TB
-      VER["Verify HMAC/Ed25519"]:::proc
-      DEDUPE["De-duplicate\n(device_id + seq/window)"]:::proc
-      CRT["CRT recombination\n(Garner)"]:::proc
+      REG["DeviceRegistry\n(device_id → key_id)"]:::data
+      VER["Verify HMAC/Ed25519\n/metrics: ingress_packets_total, ingress_latency_seconds"]:::proc
+      DEDUPE["De-duplicate\n(device_id + seq/window)\n/metrics: duplicates_total"]:::proc
+      CRT["CRT recombination (Garner)\n(recover canonical values)"]:::proc
       STAGE["Stage by window_id"]:::proc
+      DROP["Drop invalid/failed\n/metrics: drops_total"]:::proc
+
+      REG --> VER
       VER --> DEDUPE --> CRT --> STAGE
+      VER -- fail --> DROP
+      CRT -- fail --> DROP
     end
 
     %% Bundle creation
     subgraph BD["Bundler"]
       direction TB
       BUILD["Assemble Interval/Event Bundles"]:::proc
-      HASH["Compute merkle_root"]:::proc
+      HASH["Compute merkle_root\n/metrics: bundle_latency_seconds"]:::proc
       BUILD --> HASH
     end
 
     %% Durable queue with retries
     subgraph SF["Store & Forward"]
       direction TB
-      QUEUE["Durable queue\nSTORE_DIR"]:::box
+      QUEUE["Durable queue (STORE_DIR)\n/metrics: store_backlog_files"]:::box
       RETRY["Retry with backoff + jitter"]:::box
       QUEUE --> RETRY
     end
@@ -239,19 +245,24 @@ flowchart TB
     %% Submission scheduling
     subgraph SCH["Scheduler"]
       direction TB
-      INTERVAL["Interval submit\n(30–120 min)"]:::proc
-      EVENT["Event submit\nimmediate"]:::proc
+      COAL["Event coalesce 60–120 s\nRate-limit ≤ 6/h\n/metrics: events_rate_limited_total"]:::proc
+      INTERVAL["Interval submit (30–120 min)"]:::proc
+      EVENT["Event submit (immediate)"]:::proc
     end
 
     %% Flow between groups
     STAGE --> BUILD
     HASH --> QUEUE
+    RETRY --> COAL
+    COAL --> EVENT
     RETRY --> INTERVAL
-    RETRY --> EVENT
 
     %% Merkle hashing and Fabric submit
-    HASH --> MR["Merkle Tree\nleaf: item hash → root: merkle_root"]:::proc
-    INTERVAL --> TX["Fabric client submit\n(summary + merkle_root)"]:::proc
+    MR["Merkle Tree\nleaf: item hash → root: merkle_root"]:::proc
+    HASH --> MR
+
+    TX["Fabric client submit\n(summary + merkle_root)"]:::proc
+    INTERVAL --> TX
     EVENT --> TX
 
     %% Bundle schemas (make merkle_root explicit)
@@ -264,6 +275,8 @@ flowchart TB
     ONCHAIN["On-chain keys:\nreading:device_id:window_id → summary + merkle_root\nevent:device_id:ts → event details"]:::data
     TX --> ONCHAIN
 
+    %% Ops endpoints
+    OPS["Ops endpoints exposed:\n/healthz  /readyz  /metrics"]:::data
   end
 
   %% Styles
