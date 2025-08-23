@@ -467,6 +467,36 @@ flowchart TB
 
 Carefully tuning these timers is critical: too aggressive values cause flapping in a rural mesh, while sluggish ones inflate commit latency. The selected values assume sub‑second inter‑Pi RTTs and periodic bundles every 30–120 minutes; adjust if network conditions differ.
 
+### Block Formation & Size Estimates
+
+1. **Leaf payload.** Each ESP32 summarizes \(S\) sensors with five statistics (min, avg, max, std, count). Assuming 32‑bit floats:
+   \[
+   \text{sensor_bytes} = 5 \times 4 = 20\text{ B},\qquad
+   \text{leaf_bytes} = S \times 20 + 40
+   \]
+   The extra 40 B covers device/window IDs, flags and a signature. For the seven environmental sensors in Tier 1, \(\text{leaf_bytes}≈200\) B.
+2. **Bundle payload.** A Pi gateway aggregates \(L\) leaf payloads and appends a 32 B Merkle root plus ~32 B of headers:
+   \[
+   \text{bundle_bytes} = L \times \text{leaf_bytes} + 64
+   \]
+3. **Block construction.** The scheduler submits one bundle per Pi every window interval \(W\) minutes. The orderer collects the \(N_{\text{pi}}\) bundles and cuts a block after `BatchTimeout` or size triggers:
+   \[
+   \text{block_bytes} = 200 + N_{\text{pi}} \times \text{bundle_bytes}
+   \]
+   A ~200 B overhead accounts for the block header and metadata.
+4. **Ledger growth.** Blocks arrive once per window, so the yearly ledger size is
+   \[
+   \text{ledger}_{\text{year}} = \text{block_bytes} \times \frac{365\times1440}{W}
+   \]
+
+**Example.** With \(S=8\) sensors per leaf, \(L=10\) leaves per Pi, \(N_{\text{pi}}=50\) gateways and \(W=60\) min:
+
+- \(\text{bundle_bytes} = 10 \times (8\times20 + 40) + 64 = 2{,}064\) B.
+- \(\text{block_bytes} = 200 + 50 \times 2{,}064 \approx 103{,}400\) B (≈101 KB).
+- \(\text{ledger}_{\text{year}} \approx 103{,}400 \times \frac{365\times1440}{60} \approx 9.1\times10^8\) B (≈0.9 GB).
+
+These formulas let you plug in different numbers of Pis or sensors to project block and ledger sizes.
+
 ### Chaincode & On-Chain Keys
 
 - `reading:device_id:window_id` → `{stats, last_ts, merkle_root, writer_msp}`
