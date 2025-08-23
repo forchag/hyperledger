@@ -111,6 +111,66 @@ What each lever changes:
 
 Reviewer note. Tie back to thesis requirements: compare node count vs device memory and CRT moduli thresholds that achieve target QoS (low latency/delay) with measurements/plots referenced in your results chapter.
 
+### SLOs, Alerts & Readiness Contracts
+
+Service Level Objectives (targets to defend with data):
+
+- **Submit→commit (p95):** ≤ 5 s at steady state; show distributions for 2, 20, 100 Pis.
+- **Periodic bundles:** commit within window + 1×BatchTimeout (e.g., 60 min + 5 s).
+- **Event bundles:** commit within ≤ 2×BatchTimeout (e.g., ≤10 s).
+- **Mesh health:** per-hop latency p95 < 8 ms, min neighbors ≥ 2 per node.
+- **Backlog:** `store_backlog_files` not increasing over 30 min windows.
+- **Duplicates:** `duplicates_total` rate < 1% of `ingress_packets_total`.
+
+Prometheus recording rules:
+
+```yaml
+- record: fabric:submit_commit_seconds:p95
+  expr: histogram_quantile(0.95, sum by (le) (rate(submit_commit_seconds_bucket[5m])))
+- record: t2:bundle_latency_seconds:p95
+  expr: histogram_quantile(0.95, sum by (le) (rate(bundle_latency_seconds_bucket[5m])))
+- record: pipeline:duplicates_ratio
+  expr: rate(duplicates_total[5m]) / rate(ingress_packets_total[5m])
+- record: mesh:min_neighbors
+  expr: min(mesh_neighbors)
+- record: t2:backlog_trend_30m
+  expr: increase(store_backlog_files[30m])
+```
+
+Alert rules (examples):
+
+- alert: FabricSlowCommits
+  expr: fabric:submit_commit_seconds:p95 > 5
+  for: 10m
+  labels: {severity: page}
+  annotations: {summary: "p95 submit→commit > 5s"}
+
+- alert: PeriodicMissedWindow
+  expr: (time() - max_over_time(last_periodic_commit_ts[2h])) > (60*60 + 5)
+  for: 5m
+  labels: {severity: page}
+  annotations: {summary: "Periodic bundle missed window+timeout"}
+
+- alert: MeshDegraded
+  expr: mesh:min_neighbors < 2 or avg_over_time(per_hop_latency_ms[5m]) > 8
+  for: 15m
+  labels: {severity: warn}
+  annotations: {summary: "Mesh neighbors/latency out of SLO"}
+
+- alert: BacklogGrowing
+  expr: t2:backlog_trend_30m > 50
+  for: 30m
+  labels: {severity: warn}
+  annotations: {summary: "Store&Forward backlog growing"}
+
+Readiness contracts (wire `/readyz` to real liveness):
+
+- Report READY only if a new commit height was observed within the last 2×BatchTimeout or the last scheduled periodic window (whichever is tighter).
+- Fail readiness if mesh route to the orderer is down (no neighbors or no WireGuard session), or if backlog exceeds a threshold for > 30 min.
+- Keep `/healthz` simple (pipeline alive, no fatal loops), but `/readyz` should depend on recent ledger progress to prevent false-ready states.
+
+Reviewer note. This section operationalizes the “timings are critical—define your choices” feedback and ties the diagram to measurable SLOs and alerts you’ll validate experimentally in the thesis.
+
 ### How to read this (brief explanations)
 
 1. **Tier 1 → Tier 2:** Each ESP32 sends a window summary with an `urgent` flag and optional CRT residues. Tier 2 verifies, de-duplicates, stages, bundles, and computes a `merkle_root`.
