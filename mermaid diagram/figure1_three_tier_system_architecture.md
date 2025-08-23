@@ -202,14 +202,46 @@ Tier 2 produces two bundle types (define them concretely in the doc so they're u
 
 ---
 
-4) **Mini data-flow**
+4) **Tier-2 gateway diagram**
 
 ```mermaid
-flowchart LR
-  IN["Ingress\nverify | dedupe | stage by window_id"] --> Q[(Window queues)]
-  Q --> BND["Bundler\nbuild IntervalBundle/EventBundle"]
-  BND --> MR["Merkle Tree\ncompute merkle_root"]
-  MR --> OUT["Submit summary + merkle_root\nto Fabric (Tier 4)"]
+flowchart TB
+  %% ========= TIER 2: PI GATEWAY =========
+  subgraph T2["Tier 2 — Raspberry Pi Gateway\n(Ingest • Verify • Bundle • Schedule)"]
+    direction TB
+
+    INGRESS["IngressService\n• Verify HMAC/Ed25519\n• Dedupe (device_id, seq/window)\n• CRT recombination (Garner)\n• /metrics: ingress_packets_total, duplicates_total, drops_total, ingress_latency_seconds"]:::box
+
+    BUNDLER["Bundler\n• Build IntervalBundle / EventBundle\n• Compute merkle_root per bundle\n• /metrics: bundle_latency_seconds, events_rate_limited_total"]:::box
+
+    SOF["StoreAndForward\n• Durable queue in STORE_DIR\n• Retry with backoff + jitter\n• /metrics: store_backlog_files"]:::box
+
+    SCHED["Scheduler\n• Submit IntervalBundle on cadence (30–120 min)\n• Submit EventBundle immediately\n• Parameters are critical — justify in policy"]:::box
+
+    %% Flow
+    INGRESS --> BUNDLER --> SOF --> SCHED
+
+    %% Explicit Merkle step and submit
+    MR["Merkle Tree\nleaf: item hash → root: merkle_root"]:::proc
+    BUNDLER --> MR
+
+    TX["Fabric client submit\n(summary + merkle_root)"]:::proc
+    SCHED --> TX
+
+    %% Bundle schemas (make merkle_root explicit)
+    IB["IntervalBundle fields:\n{bundle_id, window_id, readings[], created_ts, count, merkle_root}"]:::data
+    EB["EventBundle fields:\n{bundle_id, events[{device_id, ts, type, before[], after[], thresholds}], created_ts, merkle_root}"]:::data
+
+    %% On-chain mapping (what Tier 4 stores/indexes)
+    ONCHAIN["On-chain keys:\nreading:device_id:window_id → summary + merkle_root\nevent:device_id:ts → event details"]:::data
+    TX --> ONCHAIN
+
+  end
+
+  %% Styles
+  classDef box fill:#fff8e1,stroke:#ff8f00,color:#4e342e;
+  classDef proc fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20;
+  classDef data fill:#eeeeee,stroke:#616161,color:#212121;
 ```
 
 ---
