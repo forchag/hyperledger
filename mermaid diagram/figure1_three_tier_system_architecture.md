@@ -451,9 +451,34 @@ flowchart TB
   classDef policy fill:#ede7f6,stroke:#5e35b1,color:#311b92;
 ```
 
+### Blockchain & Ledger Overview
+
+Hyperledger Fabric peers keep two synchronized data structures: an immutable
+blockchain and a mutable world state.  Each block contains a header with the
+`PreviousHash` and `DataHash`, an ordered list of transactions and associated
+metadata.  Linking the `PreviousHash` values forms a tamper‑evident chain.  When
+a block commits, the peer appends it to the block store and applies each
+transaction’s write‑set to the state database (CouchDB in this deployment),
+allowing fast queries of current values while preserving the full audit trail.
+
+Transactions progress through four phases:
+
+1. **Endorsement:** the client invokes chaincode on endorsing peers and
+   collects signatures over the produced read/write sets.
+2. **Ordering:** endorsed transactions are sent to the ordering service for
+   global sequencing.
+3. **Validation:** peers verify endorsement policies and check for MVCC
+   conflicts.
+4. **Commit:** validated transactions are written to the block chain and world
+   state atomically.
+
 ### Consensus & Block Policy
 
-- **Consensus:** Raft. **Sizing rule:** ≤10 Pis → **1 orderer**; ≥20 Pis → **3 orderers** (odd number, separate power domains). Tolerates a node failure while keeping quorum.
+- **Consensus:** Raft crash‑fault tolerant protocol. Orderers elect a leader
+  that appends transactions to a replicated log; followers persist entries and
+  the block is final once a quorum (⌈n/2⌉) stores it, eliminating forks. **Sizing
+  rule:** ≤10 Pis → **1 orderer**; ≥20 Pis → **3 orderers** (odd number, separate
+  power domains) so the cluster survives one failure while keeping quorum.
 - **Formation:** Scheduler submits **periodic bundles every 30–120 min**; **event bundles immediately**. Orderer cuts blocks by **BatchTimeout/size** (not instant). Keep **BatchTimeout small (2–5 s)** so events commit quickly while periodic cadence is dominated by windowing.
 - **Batching knobs:** Start with **MaxMessageCount 10–50**, **PreferredMaxBytes ~1–2 MB**, **AbsoluteMaxBytes 10 MB** (tune per throughput/link quality). Present measurement plots to justify.
 - **Latency targets:** **submit→commit** ≈ **1–2 s (2 Pis), 3–5 s (20 Pis), 10–15 s (100 Pis)**; validate with runs.
@@ -722,6 +747,12 @@ reading:device_id:window_id
 mapping to records {summary, merkle_root, writer_msp}. Blocks link by hash with:
 
 DataHash_n = h(BlockData_n),    PrevHash_n = h(Block_{n−1})
+
+These hashes produce an append‑only chain. Alongside the block log, each peer
+maintains a world‑state database (CouchDB) holding the latest value for every
+key. Committing a block appends it to the chain and atomically applies its
+write‑set to the world state, ensuring efficient queries and a complete audit
+trail.
 
 ### Tier 5 — Observability Schema
 Metrics endpoints expose counters c(t), gauges g(t) and histogram buckets H(t). Rates are derived via:
