@@ -298,6 +298,40 @@ flowchart TB
 
 ## Tier 3 (Mesh/Link)
 
+```mermaid
+flowchart TB
+  %% ========= TIER 3: MESH NETWORK =========
+  subgraph T3["Tier 3 — Pi⇄Pi Mesh Network\n(WokFi directional links + BATMAN-adv L2 + WireGuard overlay)"]
+    direction TB
+
+    %% Mesh interfaces on Pis
+    P1["Pi #1\nbat0 + wg0"]:::pi -->|"ETX≈1.2 • RSSI≈-65 dBm"| P2["Pi #2\nbat0 + wg0"]:::pi -->|"ETX≈1.4 • RSSI≈-70 dBm"| P3["Pi #3\nbat0 + wg0"]:::pi -->|"ETX≈1.3 • RSSI≈-68 dBm"| GW["Gateway Pi\nbat0 + wg0"]:::pi
+
+    %% Self-healing / reroute behavior
+    FAIL["Link down or ETX↑\n→ auto reroute (few ms/hop)"]:::proc
+    P2 -. monitor .- FAIL
+    P3 -. monitor .- FAIL
+
+    %% Mesh monitoring & metrics
+    MON["MeshMonitor (batctl + exporters)\n• neighbors • ETX • path changes • flaps\n/metrics: mesh_neighbors, mesh_retries_total,\nmesh_rssi_avg, per_hop_latency_ms"]:::obs
+    MON --- P1
+    MON --- P2
+    MON --- P3
+    MON --- GW
+  end
+
+  %% Styles
+  classDef pi fill:#fff8e1,stroke:#ff8f00,color:#4e342e;
+  classDef proc fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20;
+  classDef obs fill:#fce4ec,stroke:#ad1457,color:#880e4f;
+```
+
+- Topology & radio planning. Use directional links (“WokFi” or equivalent) to increase SNR and extend range between Pis; plan node spacing so the expected hop count keeps end-to-end delay within your cadence target. The mesh should tolerate single-link failures without violating latency SLOs.
+- Protocol stack. Radios run WPA2/3; BATMAN-adv provides Layer-2 meshing and path selection via ETX; WireGuard encrypts payloads end-to-end across bat0.
+- Performance targets. Document measured per-hop latency (aim “few ms per hop”), packet delivery ratio, route-flap rate, and jitter under varying traffic. These feed the thesis-level QoS trade-offs the reviewer asked for.
+- Metrics to export. mesh_neighbors, mesh_retries_total, mesh_rssi_avg, per_hop_latency_ms, and path_change_total (or equivalent) for Grafana.
+- Failure modes. Show how the mesh re-routes when a link’s ETX rises or RSSI falls; log an alert if ETX stays above a threshold for N windows to force maintenance.
+
 ## Tier 4 (Hyperledger Fabric)
 
 ## Tier 5 (Observability & Ops)
