@@ -18,15 +18,36 @@ Coverage planning. The number of leaf nodes depends on farm surface area and rad
 
 ```mermaid
 flowchart LR
-  subgraph Tier_1_ESP32_&_Sensors
-    LEAF(("ESP32 Leaf\nperiodic reads\nsmall packets (≤~100B target)")):::device
+  subgraph Tier_1_ESP32_Leaf
+    direction TB
+    ESP32(("ESP32 Controller\nwindowed stats\n≤100B payload")):::device
+
+    DHT22[["DHT22 Sensor\n• temperature_c\n• humidity_rh"]]:::sensor
+    SOIL[["Soil Moisture Probe\n• soil_moisture_vwc"]]:::sensor
+    PH[["pH Sensor\n• soil_ph"]]:::sensor
+    LIGHT[["Light Sensor\n• light_lux"]]:::sensor
+    WATER[["Water Level Sensor\n• water_level_cm"]]:::sensor
+    BAT[["Battery Monitor\n• battery_v"]]:::sensor
+    RSSI[["LoRa Radio\n• rssi_dbm"]]:::sensor
+
+    DHT22 --> ESP32
+    SOIL --> ESP32
+    PH --> ESP32
+    LIGHT --> ESP32
+    WATER --> ESP32
+    BAT --> ESP32
+    RSSI --> ESP32
+
+    CRT_NOTE[CRT residues when\npayload > budget]:::note
     COV[Coverage planning:\nFarm area ↔ Radio range ↔ Node count]:::note
-    CRT_NOTE[CRT triggers when payload > budget]:::note
   end
-  LEAF --- COV
-  LEAF --- CRT_NOTE
+
+  ESP32 -->|compact window| PI_GW["Raspberry Pi Gateway"]:::device
+  ESP32 --- CRT_NOTE
+  ESP32 --- COV
 
   classDef device fill:#e0f7fa,stroke:#006064,color:#00363a;
+  classDef sensor fill:#fff3e0,stroke:#ef6c00,color:#e65100;
   classDef note fill:#eeeeee,stroke:#616161,color:#212121;
 ```
 
@@ -45,9 +66,10 @@ Sensor set (environmental & system vitals) — include all that apply
 - soil_moisture_vwc (% volumetric water content)  
 - humidity_rh (% relative humidity)  
 - soil_ph (pH, unitless)  
-- light_lux (lux)  
-- battery_v (V battery voltage)  
+- light_lux (lux)
+- battery_v (V battery voltage)
 - rssi_dbm (dBm, link quality during last uplink)
+- water_level_cm (cm water level)
 
 For each sensor in sensor_set, embed windowed statistics in stats:  
 {min, avg, max, std, count} (numeric, fixed-point or scaled int). This preserves trends but keeps packets small.
@@ -72,13 +94,14 @@ Integrity
   "seq": 4821,
   "window_id": 109,
   "last_ts": 1693212345678,
-  "sensor_set": ["temperature_c","soil_moisture_vwc","humidity_rh","soil_ph","light_lux","battery_v","rssi_dbm"],
+  "sensor_set": ["temperature_c","soil_moisture_vwc","humidity_rh","soil_ph","light_lux","water_level_cm","battery_v","rssi_dbm"],
   "stats": {
     "temperature_c": {"min": 24.1, "avg": 25.7, "max": 27.8, "std": 0.6, "count": 36},
     "soil_moisture_vwc": {"min": 23.0, "avg": 24.4, "max": 26.9, "std": 0.8, "count": 36},
     "humidity_rh": {"min": 58.2, "avg": 61.0, "max": 63.4, "std": 1.1, "count": 36},
     "soil_ph": {"min": 6.2, "avg": 6.3, "max": 6.4, "std": 0.05, "count": 36},
     "light_lux": {"min": 1200, "avg": 2400, "max": 4000, "std": 500, "count": 36},
+    "water_level_cm": {"min": 42, "avg": 48, "max": 55, "std": 3.2, "count": 36},
     "battery_v": {"min": 3.78, "avg": 3.81, "max": 3.84, "std": 0.02, "count": 36},
     "rssi_dbm": {"min": -86, "avg": -78, "max": -72, "std": 3.1, "count": 6}
   },
@@ -97,7 +120,7 @@ The leaf transmits the compact window summary (and any urgent events) to the nea
 
 ### Reviewer alignment (Tier 1)
 
-- Actual sensor data explicitly listed (temperature, soil moisture, humidity, pH, light, battery, RSSI) → fixes the payload gap.  
+- Actual sensor data explicitly listed (temperature, soil moisture, humidity, pH, light, water level, battery, RSSI) → fixes the payload gap.
 - Node counts & CRT note included for planning and readability.  
 - CRT budget clearly defined and justified.
 
