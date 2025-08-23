@@ -401,4 +401,131 @@ flowchart TB
 - Export peer/orderer metrics and graph **submit→commit** and **block-cut** distributions under different cadences/sizes. Tie back to parameter justification to satisfy reviewer timing concerns.
 
 ## Tier 5 (Observability & Ops)
+```mermaid
+flowchart TB
+  %% ========= TIER 5: OBSERVABILITY =========
+  subgraph T5["Tier 5 — Observability & Ops"]
+    direction TB
+
+    ENDPTS["Health & Readiness\n• /healthz: mesh + pipeline OK\n• /readyz: recent commit observed"]:::box
+    PROM["Prometheus (scrape & rules)\n• Scrapes Tier 1–4 exporters\n• Recording & alerting rules"]:::obs
+    AM["Alertmanager\n• Routes: on-call, email, chat\n• Silence & maintenance windows"]:::obs
+    GRAF["Grafana Dashboards\n• Overview • Tier pages • Explorer"]:::obs
+    LOKI["Central Logs (e.g., Loki)\n• journald + app logs\n• Query by device_id/window_id"]:::obs
+
+    %% Exporters feeding Prometheus
+    E2["Tier-2 Exporters\nIngress/Bundler/Store/Scheduler\n/metrics: ingress_packets_total,\nduplicates_total, drops_total,\nbundle_latency_seconds,\nevents_rate_limited_total,\nstore_backlog_files"]:::data
+    E3["Tier-3 Mesh Exporter\n(batctl + wg)\n/metrics: mesh_neighbors,\nmesh_retries_total, mesh_rssi_avg,\nper_hop_latency_ms"]:::data
+    E4["Fabric Peer/Orderer Metrics\n/metrics: submit_commit_seconds,\nblock_height, chaincode_invoke_total"]:::data
+
+    %% Flow
+    E2 --> PROM
+    E3 --> PROM
+    E4 --> PROM
+
+    PROM --> AM
+    PROM --> GRAF
+    LOKI --> GRAF
+    ENDPTS --> PROM
+  end
+
+  %% Styles
+  classDef box fill:#fff8e1,stroke:#ff8f00,color:#4e342e;
+  classDef obs fill:#fce4ec,stroke:#ad1457,color:#880e4f;
+  classDef data fill:#eeeeee,stroke:#616161,color:#212121;
+```
+
+### Endpoints and what they mean
+
+* **`/healthz`**: returns **OK only when** the Pi pipeline is processing (ingress→bundler→scheduler) **and** mesh links are up enough to reach the gateway—keeps probes honest.
+* **`/readyz`**: returns **OK when a recent Fabric commit** (submit→commit) has been observed within a bounded time window; this couples readiness to ledger liveness.
+
+### Canonical metric names (stick to Prometheus conventions)
+
+* **Counters** (suffix `_total`): `ingress_packets_total`, `duplicates_total`, `drops_total`, `bundles_submitted_total{type}`, `events_rate_limited_total`.
+* **Histograms** (suffix `_seconds`): `ingress_latency_seconds`, `bundle_latency_seconds`, `submit_commit_seconds`.
+* **Gauges**: `mesh_neighbors`, `mesh_rssi_avg`, `store_backlog_files`, `block_height`.
+  This matches the review’s guidance to expose health & metrics from gateways/services and to track packet counts and latency.
+
+### PromQL you can paste (recording rules)
+
+```yaml
+# 1) Duplicates rate (per minute)
+- record: pipeline:duplicates_per_min
+  expr: rate(duplicates_total[5m]) * 60
+
+# 2) Submit→commit p95 (Fabric end-to-end)
+- record: fabric:submit_commit_seconds:p95
+  expr: histogram_quantile(0.95, sum by (le) (rate(submit_commit_seconds_bucket[5m])))
+
+# 3) Bundle latency p95 (Tier-2)
+- record: t2:bundle_latency_seconds:p95
+  expr: histogram_quantile(0.95, sum by (le) (rate(bundle_latency_seconds_bucket[5m])))
+
+# 4) Mesh neighbor floor (minimum over Pis)
+- record: mesh:min_neighbors
+  expr: min(mesh_neighbors)
+
+# 5) Backlog size (files waiting to send)
+- record: t2:store_backlog_files
+  expr: max(store_backlog_files)
+```
+
+### Alert rules (examples)
+
+```yaml
+groups:
+- name: orion-tier5-alerts
+  rules:
+  - alert: FabricSlowCommits
+    expr: fabric:submit_commit_seconds:p95 > 5
+    for: 10m
+    labels: {severity: page}
+    annotations:
+      summary: "Fabric p95 submit→commit > 5s"
+      runbook_url: "runbooks/fabric_slow_commits.md"
+
+  - alert: EventStorm
+    expr: rate(bundles_submitted_total{type="event"}[5m]) > 0.2  # >12/h
+    for: 10m
+    labels: {severity: warn}
+    annotations:
+      summary: "High event submit rate (possible storm)"
+
+  - alert: MeshDegraded
+    expr: mesh:min_neighbors < 2 or avg_over_time(per_hop_latency_ms[5m]) > 8
+    for: 15m
+    labels: {severity: warn}
+    annotations:
+      summary: "Mesh health degraded (neighbors/latency)"
+
+  - alert: BacklogGrowing
+    expr: increase(store_backlog_files[30m]) > 50
+    for: 30m
+    labels: {severity: warn}
+    annotations:
+      summary: "Store&Forward backlog growing"
+```
+
+### Dashboard structure (fast to navigate)
+
+1. **Overview** (single pane): key health (`/healthz`, `/readyz`), **p95 submit→commit**, bundle throughput, event rate, backlog gauge, mesh neighbors min.
+2. **Tier-2 page**: ingress packet trend, duplicates/drop rates, **bundle latency** histogram, backlog, scheduler cadence.
+3. **Tier-3 page**: neighbors by node, **per-hop latency**, retries, RSSI; highlight path changes/flaps.
+4. **Tier-4 page**: **submit→commit percentiles**, block cuts per minute, peer/orderer health, chaincode invokes, state DB ops.
+5. **Explorer**: device/window drilldown; filter by `device_id`, `window_id`, or event type.
+   (These reflect the reviewed doc’s Tier 5 intent: health checks and dashboards that show system status and recent activity.)
+
+### SLOs to pin down (tie to the review’s “timing is critical”)
+
+* **Submit→commit (p95)**: ≤ 5 s under normal load; show distributions at your scales (2, 20, 100 Pis).
+* **Bundle schedule adherence**: periodic 30–120 min windows commit within **window + 1×BatchTimeout**; events commit in **< 2×BatchTimeout**; defend these with plots.
+* **Mesh health**: ≥ 2 neighbors/node; **per-hop latency** < 8 ms on p95.
+
+### Ops notes (so it keeps running)
+
+* **Labels & cardinality**: keep `device_id` as a **label only on low-cardinality series** (e.g., *last seen* gauges); prefer window/device as **log fields** (Loki) or query keys in Fabric, not high-cardinality Prom metrics.
+* **Histogram buckets**: for `submit_commit_seconds`/`bundle_latency_seconds`, pick buckets like `[0.5, 1, 2, 3, 5, 8, 13]`.
+* **Runbooks**: link each alert to a one-page fix guide (mesh degraded, backlog growing, Fabric slow, event storm).
+* **Readiness**: wire `/readyz` to **observed block height advancing** to avoid false-ready states.
 
