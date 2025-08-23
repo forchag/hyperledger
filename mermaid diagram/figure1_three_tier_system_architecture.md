@@ -1,6 +1,6 @@
 # Five-Tier System Architecture (Per-Tier Diagrams)
 
-Each tier now has its own standalone Mermaid diagram for readability. Tier 1 and Tier 2 include Data Schemas with explicit sensor fields and CRT budget rules, while Tier 4 includes a Consensus & Block Policy justification section per reviewer feedback.
+Each tier now has its own standalone Mermaid diagram for clarity. Tier 1 and Tier 2 include data schemas with explicit sensor fields and CRT budget rules, while Tier 4 describes consensus and block policy within Hyperledger Fabric.
 
 ## Index
 
@@ -109,7 +109,7 @@ What each lever changes:
 | Bundle size | Window length, filters | Queue time \(T_q\), ledger/day | `bundle_latency_seconds`, on-chain bytes/day | Tier 2/4 |
 | CRT on leaf | Budget threshold + moduli set | Packet size, relay count/memory | payload bytes calc, success of Garner recombination | Tier 1/2 |
 
-Reviewer note. Tie back to thesis requirements: compare node count vs device memory and CRT moduli thresholds that achieve target QoS (low latency/delay) with measurements/plots referenced in your results chapter.
+
 
 ### SLOs, Alerts & Readiness Contracts
 
@@ -165,11 +165,11 @@ Alert rules (examples):
 
 Readiness contracts (wire `/readyz` to real liveness):
 
-- Report READY only if a new commit height was observed within the last 2×BatchTimeout or the last scheduled periodic window (whichever is tighter).
+  - Indicate READY only if a new commit height was observed within the last 2×BatchTimeout or the last scheduled periodic window (whichever is tighter).
 - Fail readiness if mesh route to the orderer is down (no neighbors or no WireGuard session), or if backlog exceeds a threshold for > 30 min.
 - Keep `/healthz` simple (pipeline alive, no fatal loops), but `/readyz` should depend on recent ledger progress to prevent false-ready states.
 
-Reviewer note. This section operationalizes the “timings are critical—define your choices” feedback and ties the diagram to measurable SLOs and alerts you’ll validate experimentally in the thesis.
+
 
 ### How to read this (brief explanations)
 
@@ -334,12 +334,6 @@ using a function such as SHA-256, yielding the Merkle tree leaves. Hashes are pa
 \[ h_{i,j} = H(h_{2i} \Vert h_{2i+1}) \]
 until a single root \(R\) remains. The inaugural root \(R_0\) seeds the ledger by forming the first block \(B_0=(R_0, t_0)\), and each subsequent window contributes a new root \(R_k\) appended as block \(B_k\). This process both compacts Tier 1 data and begins the blockchain.
 
-### Reviewer alignment (Tier 1)
-
-- Actual sensor data explicitly listed (temperature, soil moisture, humidity, pH, light, water level, battery, RSSI) → fixes the payload gap.
-- Node counts & CRT note included for planning and readability.  
-- CRT budget clearly defined and justified.
-
 ## Tier 2 (Pi Ingress & Bundler)
 
 Role. Tier 2 is the gateway that receives leaf packets, verifies and de-duplicates them, stages per time window, and assembles bundles for downstream commit. It submits bundles on a schedule and immediately for events.
@@ -465,17 +459,6 @@ flowchart TB
   classDef data fill:#eeeeee,stroke:#616161,color:#212121;
 ```
 
----
-
-5) **Reviewer emphasis**
-
-- Clear Tier-2 responsibilities: verify, de-dup, stage, bundle, Merkle, forward.
-- Bundle schemas defined with `merkle_root` explicitly present.
-- Cadence is critical: periodic 30–120 min vs. immediate events → justify values with data (latency/storage trade-offs).
-- Architecture ↔ Merkle linkage shown (where the root is produced and how it's used on-chain).
-
-
-
 ## Tier 3 (Mesh/Link)
 
 ```mermaid
@@ -508,7 +491,7 @@ flowchart TB
 
 - Topology & radio planning. Use directional links (“WokFi” or equivalent) to increase SNR and extend range between Pis; plan node spacing so the expected hop count keeps end-to-end delay within your cadence target. The mesh should tolerate single-link failures without violating latency SLOs.
 - Protocol stack. Radios run WPA2/3; BATMAN-adv provides Layer-2 meshing and path selection via ETX; WireGuard encrypts payloads end-to-end across bat0.
-- Performance targets. Document measured per-hop latency (aim “few ms per hop”), packet delivery ratio, route-flap rate, and jitter under varying traffic. These feed the thesis-level QoS trade-offs the reviewer asked for.
+  - Performance targets. Record measured per-hop latency (aim “few ms per hop”), packet delivery ratio, route-flap rate, and jitter under varying traffic. These metrics inform QoS trade-offs for Hyperledger Fabric deployments.
 - Metrics to export. mesh_neighbors, mesh_retries_total, mesh_rssi_avg, per_hop_latency_ms, and path_change_total (or equivalent) for Grafana.
 - Failure modes. Show how the mesh re-routes when a link’s ETX rises or RSSI falls; log an alert if ETX stays above a threshold for N windows to force maintenance.
 
@@ -616,7 +599,7 @@ Carefully tuning these timers is critical: too aggressive values cause flapping 
 - \(\text{block_bytes} = 200 + 50 \times 2{,}064 \approx 103{,}400\) B (≈101 KB).
 - \(\text{ledger}_{\text{year}} \approx 103{,}400 \times \frac{365\times1440}{60} \approx 9.1\times10^8\) B (≈0.9 GB).
 
-These formulas let you plug in different numbers of Pis or sensors to project block and ledger sizes.
+These formulas let you plug in different numbers of Pis or sensors to estimate block and ledger sizes.
 
 ### Chaincode & On-Chain Keys
 
@@ -642,7 +625,7 @@ These formulas let you plug in different numbers of Pis or sensors to project bl
 
 ### Observability
 
-- Export peer/orderer metrics and graph **submit→commit** and **block-cut** distributions under different cadences/sizes. Tie back to parameter justification to satisfy reviewer timing concerns.
+  - Export peer/orderer metrics and graph **submit→commit** and **block-cut** distributions under different cadences to tune Hyperledger Fabric performance.
 
 ## Tier 5 (Observability & Ops)
 ```mermaid
@@ -689,7 +672,7 @@ flowchart TB
 * **Counters** (suffix `_total`): `ingress_packets_total`, `duplicates_total`, `drops_total`, `bundles_submitted_total{type}`, `events_rate_limited_total`.
 * **Histograms** (suffix `_seconds`): `ingress_latency_seconds`, `bundle_latency_seconds`, `submit_commit_seconds`.
 * **Gauges**: `mesh_neighbors`, `mesh_rssi_avg`, `store_backlog_files`, `block_height`.
-  This matches the review’s guidance to expose health & metrics from gateways/services and to track packet counts and latency.
+   This exposes health and metrics from gateways and services while tracking packet counts and latency.
 
 ### PromQL you can paste (recording rules)
 
@@ -758,9 +741,9 @@ groups:
 3. **Tier-3 page**: neighbors by node, **per-hop latency**, retries, RSSI; highlight path changes/flaps.
 4. **Tier-4 page**: **submit→commit percentiles**, block cuts per minute, peer/orderer health, chaincode invokes, state DB ops.
 5. **Explorer**: device/window drilldown; filter by `device_id`, `window_id`, or event type.
-   (These reflect the reviewed doc’s Tier 5 intent: health checks and dashboards that show system status and recent activity.)
+   These steps reflect Tier 5's intent: health checks and dashboards that show system status and recent activity.
 
-### SLOs to pin down (tie to the review’s “timing is critical”)
+### SLOs to pin down
 
 * **Submit→commit (p95)**: ≤ 5 s under normal load; show distributions at your scales (2, 20, 100 Pis).
 * **Bundle schedule adherence**: periodic 30–120 min windows commit within **window + 1×BatchTimeout**; events commit in **< 2×BatchTimeout**; defend these with plots.
@@ -780,7 +763,7 @@ This section summarises the canonical data schemas used from the sensors up thro
 ### Tier 1 — Sensor Window Schema
 Each ESP32 leaf records a vector of readings
 x(t) = { T(t), M(t), H(t), pH(t), L(t), V(t), R(t) }
-for temperature T, soil moisture M, relative humidity H, soil pH, light intensity L, battery voltage V and RSSI R. Over a sampling window W the node reports:
+  for temperature T, soil moisture M, relative humidity H, soil pH, light intensity L, battery voltage V and RSSI R. Over a sampling window W the node outputs:
 
 avg_s = (1/|W|) Σ_{t∈W} x_s(t)
 min_s = min_{t∈W} x_s(t)
