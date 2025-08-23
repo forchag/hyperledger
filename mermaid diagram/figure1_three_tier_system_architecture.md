@@ -1,236 +1,56 @@
-# Figure 1 — Five-Tier System Architecture (ESP32 → Pi → Mesh → Fabric → Observability)
+# Five-Tier System Architecture (Per-Tier Diagrams)
 
-This figure shows how sensor data travels from field devices to the blockchain and monitoring tools.
-The design is divided into five tiers, each highlighted with a different color in the diagram below.
+Each tier now has its own standalone Mermaid diagram for readability. Tier 1 and Tier 2 include Data Schemas with explicit sensor fields and CRT budget rules, while Tier 4 includes a Consensus & Block Policy justification section per reviewer feedback.
 
-Related Figures:
-- [Full Communication Scheme (ESP32 ↔ Pi ↔ Mesh ↔ Fabric ↔ Observability)](figure_comm_all_nodes.md)
-- [Evaluation: Energy & Communications Metrics (ESP32 + Pi + Mesh + Fabric)](figure_eval_energy_comm_metrics.md)
+## Index
 
-> **Ledger cadence:** periodic blocks every **30–120 min** (configurable) **and** event-triggered blocks (immediate).
-> **Scope:** self-contained farm network (no external connectivity required).
+- [Tier 1 (ESP32 & Sensors)](#tier-1--esp32--sensors-standalone-diagram--data-schemas--crt-budget)
+- [Tier 2 (Pi Ingress & Bundler)](#tier-2-pi-ingress--bundler)
+- [Tier 3 (Mesh/Link)](#tier-3-meshlink)
+- [Tier 4 (Hyperledger Fabric)](#tier-4-hyperledger-fabric)
+- [Tier 5 (Observability & Ops)](#tier-5-observability--ops)
 
-## Architecture Diagram
+## Tier 1 — ESP32 & Sensors (Standalone Diagram + Data Schemas + CRT Budget)
 
 ```mermaid
 flowchart LR
-  %% ========= CLASSES / COLORS =========
-  classDef tier1 fill:#E6FFF2,stroke:#00A86B,stroke-width:1px,color:#064e3b;
-  classDef tier2 fill:#F1F8FF,stroke:#1E66F5,stroke-width:1px,color:#0f3a8a;
-  classDef tier3 fill:#FFF5E6,stroke:#FF8C00,stroke-width:1px,color:#7a3f00;
-  classDef tier4 fill:#FDF0FF,stroke:#9D4EDD,stroke-width:1px,color:#3e1a6d;
-  classDef tier5 fill:#FFF0F0,stroke:#D7263D,stroke-width:1px,color:#6b111b;
-  classDef data fill:#ffffff,stroke:#999,stroke-dasharray:4 3,color:#333;
-  classDef note fill:#fffef7,stroke:#bdb29f,stroke-width:1px,color:#4a3b18;
-
-  %% ========= TIER 1: ESP32 + SENSORS =========
-  subgraph T1["Tier 1 - ESP32 and Sensors"]
-    direction TB
-    SENSORS[[DHT22 Light pH Soil Moisture Water Level]]
-    ESP32[ESP32 Node<br/>Sampling 1 to 5 minutes<br/>Rolling statistics per window<br/>Threshold and delta rate events<br/>Monotonic sequence reboot safe<br/>Optional CRT residues]
-    SENSORS --> ESP32
-    PLOAD[Leaf to Pi Payload less than about 100 bytes<br/>&#123;device_id, seq, window_id,<br/>stats&#123;min,avg,max,std,count&#125;, last_ts,<br/>sensor_set, urgent, crt?, sig&#125;]:::data
+  subgraph Tier_1_ESP32_&_Sensors
+    LEAF(("ESP32 Leaf\nperiodic reads\nsmall packets (≤~100B target)")):::device
+    COV[Coverage planning:\nFarm area ↔ Radio range ↔ Node count]:::note
   end
-  class T1 tier1
-  class SENSORS,ESP32,PLOAD tier1
+  LEAF --- COV
 
-  %% ========= TIER 2: PI GATEWAY =========
-  subgraph T2["Tier 2 - Raspberry Pi Gateway"]
-    direction TB
-    INGRESS[Ingress Service<br/>Verify HMAC or Ed25519<br/>Deduplicate by device and sequence<br/>CRT recombination via Garner]
-    BUNDLER[Bundler<br/>Interval bundle 30 to 120 minutes<br/>Event coalesce 60 to 120 seconds<br/>Rate limit events for example six per hour]
-    SOF[Store And Forward<br/>Durable queue in store directory<br/>Retry with backoff and jitter]
-    SCHED[Scheduler<br/>Submit interval bundle on cadence<br/>Submit event bundle immediately]
-    INGRESS --> BUNDLER --> SCHED
-    BUNDLER --> SOF
-    IB[Interval Bundle Fields<br/>&#123;bundle_id, window_id,<br/>readings&#91;&#93;, created_ts, count,<br/>residues_hash? or MerkleRoot&#125;]:::data
-    EB[Event Bundle Fields<br/>&#123;bundle_id, events&#91;&#123;device_id, ts, type,<br/>before&#91;&#93;, after&#91;&#93;, thresholds&#125;&#93;, created_ts&#125;]:::data
-  end
-  class T2 tier2
-  class INGRESS,BUNDLER,SOF,SCHED,IB,EB tier2
-
-  %% ========= TIER 3: MESH NETWORK =========
-  subgraph T3["Tier 3 - Pi to Pi Mesh Network"]
-    direction TB
-    MESH[Mesh Interface bat0<br/>Self healing layer two<br/>Two to five milliseconds per hop tens of megabits per second<br/>WPA2 or WPA3 plus WireGuard overlay]
-    MON[Mesh Monitor batctl<br/>Neighbors and ETX and Path changes and Alerts]
-  end
-  class T3 tier3
-  class MESH,MON tier3
-
-  %% ========= TIER 4: BLOCKCHAIN =========
-  subgraph T4["Tier 4 - Blockchain Hyperledger Fabric"]
-    direction TB
-    ORDERER[Orderer Raft<br/>One to three nodes odd count<br/>Immediate block on submit]
-    PEERS[Peers on Raspberry Pi<br/>Endorse Validate Commit<br/>CouchDB indexes device window timestamp]
-    CC[Chaincode and Keys<br/>reading device_id window_id to &#123;stats, last_ts, residues_hash?, writer_msp&#125;<br/>event device_id timestamp to &#123;type, before&#91;&#93;, after&#91;&#93;, thresholds, writer_msp&#125;<br/>Guards last_seq per device and Idempotency]
-    BLOCK[Block Structure and Policy<br/>Typical block payload about one hundred kilobytes summaries<br/>Preferred Max Bytes about one megabyte<br/>Merkle tree over transaction set gives merkle root in header<br/>Header &#123;prev_hash, merkle_root, ts&#125;<br/>Periodic every thirty to one hundred twenty minutes from scheduler<br/>Event triggered immediate cut]
-  end
-  class T4 tier4
-  class ORDERER,PEERS,CC,BLOCK tier4
-
-  %% ========= TIER 5: OBSERVABILITY =========
-  subgraph T5["Tier 5 - Observability and Operations"]
-    direction TB
-    HEALTH[Health and Readiness<br/>Healthz mesh and pipeline okay<br/>Readyz recent commit seen]
-    METRICS[Prometheus Metrics<br/>ingress_packets_total<br/>duplicates_total<br/>bundles_submitted_total&#123;type&#125;<br/>submit_commit_seconds<br/>mesh_neighbors store_backlog_files<br/>events_rate_limited_total]
-    DASH[Dashboards and Explorer<br/>Periodic state view<br/>Event timeline]
-  end
-  class T5 tier5
-  class HEALTH,METRICS,DASH tier5
-
-  %% ========= DATA FLOWS AND PROTOCOLS =========
-  ESP32 -- "Wi Fi client to Pi SSID WPA2 or WPA3<br/>Periodic summary ten to fifteen minutes or at window close<br/>Event alert immediate with small pre and post raw<br/>&#123;device_id, seq, window_id, stats, last_ts, urgent, crt?, sig&#125;" --> INGRESS
-  INGRESS -- "Normalized Record<br/>signature ok and dedup ok and CRT to value" --> BUNDLER
-  SCHED -- "Submit interval bundle and event bundle" --> MESH
-  MESH -- "gRPC TLS over WireGuard recommended<br/>Two to five milliseconds per hop and layer two mesh routing BATMAN adv" --> ORDERER
-  ORDERER -- "Ordered block broadcast Raft" --> PEERS
-  PEERS -- "Commit and chaincode events" --> DASH
-  PEERS -- "Commit events and read back verify<br/>submit to commit latency to health" --> HEALTH
-  PEERS -- "Metrics exporter to slash metrics" --> METRICS
-
-  %% ========= NOTES AND CALLOUTS =========
-  CRTNOTE[CRT and Modular Arithmetic optional<br/>Leaf packs large integers as residues r sub i equals x mod m sub i pairwise coprime m&#91;&#93;<br/>Pi recombines via Garner to recover x<br/>Saves airtime and ESP32 memory<br/>Versioned modulus set for rotation and validation]:::note
-  BLKNOTE[Block and Consensus Parameters<br/>Consensus Raft one orderer for up to ten Pis three orderers for twenty or more<br/>Submit to commit typical one to two seconds at two Pis three to five seconds at twenty Pis ten to fifteen seconds at one hundred Pis<br/>Blocks dominated by cadence thirty to one hundred twenty minutes rather than batch timeout two to five seconds<br/>On chain stores summaries and proofs raw retained off chain with Merkle root]:::note
-
-  ESP32 -. "residues set and values" .-> CRTNOTE
-  BLOCK -. "parameters and sizing" .-> BLKNOTE
-
+  classDef device fill:#e0f7fa,stroke:#006064,color:#00363a;
+  classDef note fill:#eeeeee,stroke:#616161,color:#212121;
 ```
 
----
+### Data Schemas (Leaf → Pi payload)
 
-## Merkle Tree (Bundle Proof) Diagram
-
-```mermaid
-flowchart TB
-  %% ======= Styles =======
-  classDef leaf fill:#E6FFF2,stroke:#00A86B,color:#064e3b,stroke-width:1px;
-  classDef inner fill:#F1F8FF,stroke:#1E66F5,color:#0f3a8a,stroke-width:1px;
-  classDef root fill:#FDF0FF,stroke:#9D4EDD,color:#3e1a6d,stroke-width:2px;
-  classDef note fill:#FFFBE6,stroke:#C9A227,color:#5a4a00,stroke-dasharray:4 3;
-
-  T["Merkle Tree for Interval/Event Bundles"]:::note
-
-  I0["Item 0<br/>(tx/reading or raw chunk)"]:::leaf --> H0["h0 = H(serialize(I0))"]:::leaf
-  I1["Item 1"]:::leaf --> H1["h1 = H(serialize(I1))"]:::leaf
-  I2["Item 2"]:::leaf --> H2["h2 = H(serialize(I2))"]:::leaf
-  I3["Item 3"]:::leaf --> H3["h3 = H(serialize(I3))"]:::leaf
-  I4["Item 4"]:::leaf --> H4["h4 = H(serialize(I4))"]:::leaf
-  I5["Item 5"]:::leaf --> H5["h5 = H(serialize(I5))"]:::leaf
-  I6["Item 6"]:::leaf --> H6["h6 = H(serialize(I6))"]:::leaf
-  I7["Item 7"]:::leaf --> H7["h7 = H(serialize(I7))"]:::leaf
-
-  H0 --> H01["h01 = H(h0 || h1)"]:::inner
-  H1 --> H01
-  H2 --> H23["h23 = H(h2 || h3)"]:::inner
-  H3 --> H23
-  H4 --> H45["h45 = H(h4 || h5)"]:::inner
-  H5 --> H45
-  H6 --> H67["h67 = H(h6 || h7)"]:::inner
-  H7 --> H67
-
-  H01 --> H0123["h0123 = H(h01 || h23)"]:::inner
-  H23 --> H0123
-  H45 --> H4567["h4567 = H(h45 || h67)"]:::inner
-  H67 --> H4567
-
-  H0123 --> ROOT["Merkle Root = H(h0123 || h4567)"]:::root
-  H4567 --> ROOT
-
-  N1["Hash Function:<br/>H = SHA-256 (or project-selected)<br/>Internal: H(left || right)<br/>Leaves: H(serialize(item))"]:::note
-  N2["Odd Leaves Rule:<br/>If #leaves is odd, duplicate the last:<br/>H(hN || hN)"]:::note
-  N3["On-Chain Usage:<br/>Store root in block header or bundle meta<br/>Raw kept off-chain in STORE_DIR → path proofs"]:::note
-  N4["Context:<br/>Interval (30–120 min) & Event bundles each produce a root<br/>Roots enable compact integrity proofs"]:::note
-  N5["CRT (Optional at leaf payload):<br/>Residues r_i = x mod m_i; Pi uses Garner to recover x<br/>Merkle covers canonical (recovered) values"]:::note
-
-  T -.-> N1
-  ROOT -.-> N3
-  H7 -.-> N2
-  I0 -.-> N5
-  H0123 -.-> N4
+```
+device_id, seq, window_id, last_ts,
+sensor_set = {temperature, soil_moisture, humidity, pH, light_lux, battery_v},
+stats = {min, avg, max, std, count} per field,
+flags {urgent},
+optional crt {m[], r[]},
+sig (Ed25519 or HMAC)
 ```
 
----
+### CRT & Modular Arithmetic (When/Why) — Budget Establishment
 
-## Understanding the Five Tiers
+Payload budget target ≤ ~100B. Example byte breakdown:
 
-1. **Tier 1 – ESP32 and Sensors**
-   - Reads local sensors every few minutes.
-   - Builds small packets with statistics and optional event flags.
-   - Sends packets to the nearest Raspberry Pi gateway.
+- ids/timestamps ≈ 16B
+- sensor stats (6 fields × 5 stats × ~2B) ≈ 60B
+- flags ≈ 1B
+- signature ≈ 16B
 
-2. **Tier 2 – Raspberry Pi Gateway**
-   - Verifies packets, removes duplicates, and groups data into bundles.
-   - Stores bundles and forwards them on a schedule or immediately for events.
+Total approaches 93B; if the computed payload size exceeds the budget, enable CRT residues `r_i = x mod m_i` using pairwise co-prime `m[]` whose product spans the numeric range of the encoded values. The budget is established by summing the concrete field sizes of the sensor set above; when total > budget, CRT is triggered. Enabling CRT can influence secondary/relay node planning due to processing and memory trade-offs.
 
-3. **Tier 3 – Mesh Network**
-   - Raspberry Pis forward bundles across a self-forming Wi‑Fi mesh.
-   - The mesh reroutes around failures and adds only a few milliseconds per hop.
+## Tier 2 (Pi Ingress & Bundler)
 
-4. **Tier 4 – Hyperledger Fabric**
-   - Bundles become transactions on the blockchain.
-   - Fabric orders them into blocks and keeps a searchable ledger of summaries.
+## Tier 3 (Mesh/Link)
 
-5. **Tier 5 – Observability and Operations**
-   - Health checks and dashboards show system status and recent activity.
-   - Prometheus metrics track packet counts, latency, and system load.
+## Tier 4 (Hyperledger Fabric)
 
----
+## Tier 5 (Observability & Ops)
 
-## Data Schemas
-
-- **Leaf → Pi Payload (≤ ~100 B)**:  
-  `device_id, seq, window_id, stats{min,avg,max,std,count}, last_ts, sensor_set, urgent, optional crt{m[],r[]}, sig`  
-
-- **IntervalBundle**:  
-  `bundle_id, window_id, readings[], created_ts, count, optional residues_hash/MerkleRoot`  
-
-- **EventBundle**:  
-  `bundle_id, events[{device_id, ts, type, before[], after[], thresholds}], created_ts`  
-
-- **On-chain keys**:  
-  `reading:device_id:window_id → summary stats (+ optional proof hash)`  
-  `event:device_id:ts → event details`  
-  *Rationale: Summaries reduce ledger size; raw recoverable via Merkle proofs*
-
----
-
-## Consensus & Block Policy
-
-- **Consensus**: Raft; 1 orderer for ≤ 10 Pis; 3 orderers for ≥ 20 Pis (odd number, separate power)  
-- **Formation**: Scheduler submits periodic bundles every 30–120 min; event bundles submit immediately  
-- **Typical submit→commit latency**: ~1–2 s (2 Pis), 3–5 s (20 Pis), 10–15 s (100 Pis)  
-- **BatchTimeout**: Keep small (2–5 s); cadence dominates block timing  
-
----
-
-## CRT & Modular Arithmetic (When/Why)
-
-- Enable on leaves when payloads risk exceeding budget  
-- **Encoding**: Residues r_i = x mod m_i with pairwise co-prime m[]; product covers range of x  
-- **Recombination**: Pi uses Garner’s algorithm; versioned m[] for rotation/validation  
-- **Failure mode**: Mark record invalid (log reason), continue others; prefer canonical (recovered) values for Merkle hashing  
-
----
-
-## Security & Operations
-
-- **Identity & Integrity**: HMAC or Ed25519 signatures from leaves; device registry maps device_id → key_id  
-- **Transport**: ESP32↔Pi over WPA2/3; Pi-mesh secured via WireGuard overlay on BATMAN-adv  
-- **Health & Metrics**: /healthz, /readyz, /metrics exposed by gateways  
-
----
-
-## Caption & Legend
-
-**Figure 1**: Five-Tier, color-separated architecture; arrows label data, transport, and policy  
-
-| Tier | Color     | Component                          |
-|------|-----------|------------------------------------|
-| 1    | `#E6FFF2` | ESP32 + Sensors (Leaf Intelligence) |
-| 2    | `#F1F8FF` | Raspberry Pi Gateway               |
-| 3    | `#FFF5E6` | Pi⇄Pi Mesh Network                |
-| 4    | `#FDF0FF` | Blockchain (Hyperledger Fabric)    |
-| 5    | `#FFF0F0` | Observability & Ops                |
-```
