@@ -226,6 +226,18 @@ Integrity
 
 Define a target payload budget (e.g., ≤ ~100 B) and compute it from the actual fields above (IDs/timestamps + N sensors × 5 stats + signature + flags). If the computed size for a given window exceeds the budget, enable `crt{m[], r[]}` for selected large numeric groups (e.g., multi-field stats), choosing moduli so that the product covers their range; Pi recombines to canonical values before bundling and Merkle hashing. This answers “How is the budget established to enable CRT?” → by summing concrete field sizes and switching CRT only when the sum exceeds the set budget. The choice can influence secondary/relay node planning due to processing/memory trade-offs.
 
+A representative calculation is below (assuming 7 sensors and 16-bit stats):
+
+| Component                                 | Bytes |
+|-------------------------------------------|------:|
+| device_id + seq + window_id + last_ts     |   20 |
+| flags                                     |    1 |
+| stats (7 sensors × 5 stats × 2 B)         |   70 |
+| signature (HMAC-SHA256)                   |   32 |
+| **Total**                                 | **123** |
+
+Because the total exceeds the 100 B target, the node activates CRT for the bulkiest integers. Each such value \(x\) is encoded as residues \(r_i = x \bmod m_i\) under pairwise-coprime moduli \(m_i\). Sending two 1-byte residues instead of a 32-bit integer shrinks the payload while preserving deterministic reconstruction on the Pi.
+
 CRT is **optional**: if the calculated size remains under the budget, the node omits the `crt` field and transmits canonical integers directly. When the window threatens to overflow the limit (e.g., many sensors or high‑precision counts), the node selects pairwise coprime moduli \(m_i\) (e.g., \(97,101,103\)) whose product covers the numeric range and sends residues \(r_i = x \bmod m_i\). The Pi reconstructs \(x\) using the Chinese Remainder Theorem—typically via Garner’s algorithm—verifies that \(x < \prod m_i\), and restores the original integer before computing the Merkle hash. Thus CRT reduces wire size without changing the deterministic value hashed into the tree or seeding the blockchain.
 
 ### Hand-off to Tier 2
