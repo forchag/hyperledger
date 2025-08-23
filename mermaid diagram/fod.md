@@ -40,6 +40,7 @@ The flow starts at the ESP32, passes through the Pi gateway and mesh, and ends a
 
 Total latency is the sum of these components:
 `Latency_total = L_read + L_wifi + L_ingress + L_bundle_wait + L_sched + L_mesh + L_submit_to_commit`
+Each term reflects a measurable stage in the pipeline: `L_read` covers sensor sampling, `L_wifi` is the wireless hop to the gateway, `L_ingress` accounts for parsing and deduplication, `L_bundle_wait` is the scheduler's coalescing delay, `L_sched` is time spent queued, `L_mesh` measures multi-hop forwarding, and `L_submit_to_commit` is the blockchain confirmation path.
 
 ```mermaid
 flowchart LR
@@ -66,7 +67,7 @@ These delays form the time a reading needs to appear on-chain. Periodic data is 
 
 ## Part C — Energy Budgets
 
-The values below derive from my hardware. Adjust currents and duty cycles for specific components before recalculating totals.
+The values below derive from my hardware. Current draws come from Espressif datasheets and inline meter readings; adjust currents and duty cycles for specific components before recalculating totals.
 
 ### C1. ESP32 leaf node (Wi-Fi uplink)
 
@@ -94,7 +95,7 @@ The values below derive from my hardware. Adjust currents and duty cycles for sp
 
 **Daily energy formula per node:**
 `E_day_Wh = (Σ_i (I_i_mA * t_i_s) * V / 1000) / 3600`
-where `i` covers sleep, sampling, and TX states.
+where `i` covers sleep, sampling, and TX states. The expression comes from `E = V × I × t`: divide by `1000` to convert milliamps to amps and by `3600` to change seconds to hours, yielding watt-hours. Current values are sourced from Espressif datasheets and bench measurements.
 
 **Example scenario:**
 
@@ -107,9 +108,47 @@ where `i` covers sleep, sampling, and TX states.
 * Deep sleep otherwise (no light sleep), `t = 86400 s - (86.4 + 19.2 + 4.8) s = 86289.6 s`
   * Sleep energy per day: `I=0.01 mA, t = 86289.6 s`
 
-Compute daily energy with the formula above.
+Using these numbers:
+`E_day_Wh = ((60 mA * 86.4 s) + (200 mA * 19.2 s) + (80 mA * 4.8 s) + (0.01 mA * 86289.6 s)) * 3.3 V / 1000 / 3600 ≈ 0.0094 Wh`
+This is roughly 9.4 mWh per day.
 
-Alert rules include a duration of 5 minutes to avoid flapping.
+Energy per uplink in this scenario is `E_uplink_mWh = 9.4 mWh / 96 ≈ 0.098 mWh`. This lets you compare firmware revisions by energy cost per delivered summary instead of only daily totals.
+
+### C2. Raspberry Pi gateway
+
+The Pi powers the mesh, bundling, and Fabric peers. Measure wall power with a USB inline meter or AC plug analyzer and compute daily energy via `E_pi_day_Wh = Σ_j (P_j_W * t_j_s) / 3600`.
+
+**Typical power states:**
+
+* Idle baseline: 2.5 W (Pi 4 with OS services)
+* Mesh/Wi-Fi6 active: +1.0 W while forwarding packets
+* Block processing bursts: +1.5 W during bundling and `submit_to_commit`
+* Logging/monitoring: +0.5 W if verbose debug enabled
+
+**Example day:** mesh active for 6 h, 96 commits at 5 s each, logging 1 h:
+
+* `P_idle = 2.5 W, t_idle = 86400 s`
+* `P_mesh = 1.0 W, t_mesh = 21600 s`
+* `P_block = 1.5 W, t_block = 96 * 5 s = 480 s`
+* `P_log = 0.5 W, t_log = 3600 s`
+
+`E_pi_day_Wh ≈ (2.5*86400 + 1.0*21600 + 1.5*480 + 0.5*3600) / 3600 ≈ 70 Wh`
+
+Adjust times for your deployment; tracking this helps budget battery or solar capacity.
+
+---
+
+## Part D — Communications metrics evaluation
+
+To judge network health and airtime efficiency, derive these ratios from the Prometheus counters:
+
+* **Ingress drop rate:** `drop_rate = drops_total / ingress_packets_total`
+* **Duplicate rate:** `dup_rate = duplicates_total / ingress_packets_total`
+* **Mesh retry rate:** `retry_rate = mesh_retries_total / bundles_submitted_total`
+* **Average mesh throughput:** `T_mesh_day / 86400` bytes per second using `T_mesh_day` from Part J
+* **End-to-end success:** `1 - drop_rate - dup_rate`
+
+Evaluate 24 h windows; alert if drop or duplicate rates exceed 1% or if mesh retries spike after a link change. Alert rules include a duration of 5 minutes to avoid flapping.
 
 ---
 
@@ -143,8 +182,15 @@ Alert rules include a duration of 5 minutes to avoid flapping.
 
 6. **Power profiling**
 
-   * Measure Pi wall power with and without mesh + Fabric.
-   * Record averages and spikes during block commit.
+   * Measure Pi wall power with and without mesh + Fabric to isolate network and consensus cost.
+   * Log average and peak watts; convert to daily Wh using `P * t / 3600`.
+   * For ESP32 leaves, cross-check meter readings against `E_uplink_mWh` from Part C.
+
+7. **Communication reliability test**
+
+   * Sustain 1 Hz traffic for 10 min while varying RSSI with an attenuator.
+   * Observe `drops_total`, `duplicates_total`, and `mesh_retries_total`.
+   * Expect drop and duplicate rates below 1% and retry rate under 5% for healthy links.
 
 ---
 
@@ -161,10 +207,11 @@ Let:
 
 **Daily traffic per gateway over mesh:**
 `T_mesh_day = B_cadence * S_bundle`
+This estimates the bytes a gateway forwards across the mesh each day.
 
 **Ledger growth per day (summaries only):**
 `G_ledger_day = N_pi * B_cadence * (avg block bytes)`
-(keep avg block bytes well below `PreferredMaxBytes`; target 100–200 kB)
+(keep avg block bytes well below `PreferredMaxBytes`; target 100–200 kB). This gives a daily ledger size increase based on block payloads.
 
 **Peer CPU headroom:** keep endorser rate far below saturation; summaries keep utilization low.
 
