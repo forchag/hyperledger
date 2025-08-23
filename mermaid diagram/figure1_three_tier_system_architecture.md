@@ -457,6 +457,15 @@ flowchart TB
 - **Formation:** Scheduler submits **periodic bundles every 30–120 min**; **event bundles immediately**. Orderer cuts blocks by **BatchTimeout/size** (not instant). Keep **BatchTimeout small (2–5 s)** so events commit quickly while periodic cadence is dominated by windowing.
 - **Batching knobs:** Start with **MaxMessageCount 10–50**, **PreferredMaxBytes ~1–2 MB**, **AbsoluteMaxBytes 10 MB** (tune per throughput/link quality). Present measurement plots to justify.
 - **Latency targets:** **submit→commit** ≈ **1–2 s (2 Pis), 3–5 s (20 Pis), 10–15 s (100 Pis)**; validate with runs.
+- **Timing parameters:**
+  - **BatchTimeout:** 2–5 s upper bound before block cut; small values keep event latency low.
+  - **TickInterval:** 500 ms base Raft clock.
+  - **ElectionTick:** 10 ticks (≈5 s) for leader election; balances quick failover against false positives on a lossy mesh.
+  - **HeartbeatTick:** 1 tick (500 ms) heartbeat from leader; detects failures within a second.
+  - **SnapshotInterval:** 10 000 blocks (~7 days at 1‑min windows); limits state transfer time during recovery.
+  - **BlockRetention:** retain last 100 blocks on orderers for fast restarts.
+
+Carefully tuning these timers is critical: too aggressive values cause flapping in a rural mesh, while sluggish ones inflate commit latency. The selected values assume sub‑second inter‑Pi RTTs and periodic bundles every 30–120 minutes; adjust if network conditions differ.
 
 ### Chaincode & On-Chain Keys
 
@@ -629,6 +638,35 @@ std_s = √[(1/|W|) Σ_{t∈W} (x_s(t) − avg_s)^2]
 count_s = |W|
 
 along with timestamp τ_W, signature and optional CRT residue pairs (m_i, r_i).
+
+#### Field semantics and units
+
+| Symbol | Measurement        | Units  | Notes                              |
+|-------|--------------------|--------|------------------------------------|
+| T     | Temperature        | °C     |  -40…85 typical for ESP32 sensor   |
+| M     | Soil moisture      | %      | 0–100 volumetric water content     |
+| H     | Relative humidity  | %      | 0–100 ambient air humidity         |
+| pH    | Soil acidity       | pH     | 3–10 range across crops            |
+| L     | Light intensity    | lux    | 0–65535 from photometric sensor    |
+| V     | Battery voltage    | V      | 0–6 range depending on cell type   |
+| R     | RSSI               | dBm    | -120…0 link budget                 |
+
+Each window is emitted as JSON:
+
+```json
+{
+  "device_id": "leaf-42",
+  "window_id": 123,
+  "timestamp": "2024-05-11T10:00:00Z",
+  "stats": {
+    "T": {"avg": 21.7, "min": 18.3, "max": 24.1, "std": 1.2, "count": 120},
+    "M": {"avg": 43.1, "min": 41.9, "max": 45.0, "std": 0.6, "count": 120}
+  },
+  "signature": "<ecdsa>"
+}
+```
+
+This canonical schema fixes field names, units and numeric ranges so downstream tiers can validate data without out-of-band agreements.
 
 ### Tier 2 — Bundle Schema
 The gateway aggregates window summaries into an IntervalBundle containing {S_j}_j=1…n. A Merkle tree h = hash(·) built over the summaries yields:
