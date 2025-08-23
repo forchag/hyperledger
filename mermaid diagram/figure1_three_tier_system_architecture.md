@@ -16,6 +16,18 @@ Purpose & cadence. Tier 1 reads local sensors at a fixed interval (e.g., every f
 
 Coverage planning. The number of leaf nodes depends on farm surface area and radio range; using CRT can increase the need for secondary/relay nodes (processing/memory trade-offs).
 
+Mathematically, each sensor \(s\) produces a time series of readings \(x_s(t)\). Over a sampling window \(W\) with \(|W|\) samples, the node derives
+\[
+\text{avg}_s = \frac{1}{|W|} \sum_{t\in W} x_s(t),\qquad
+\text{min}_s = \min_{t\in W} x_s(t),\qquad
+\text{max}_s = \max_{t\in W} x_s(t),
+\]
+\[
+\text{std}_s = \sqrt{\frac{1}{|W|}\sum_{t\in W} (x_s(t)-\text{avg}_s)^2},\qquad
+\text{count}_s = |W|.
+\]
+The statistics for sensor \(s\) form the tuple \(S_s=(\text{min}_s,\text{avg}_s,\text{max}_s,\text{std}_s,\text{count}_s)\), which is encoded in the outgoing payload.
+
 
 ```mermaid
 flowchart LR
@@ -130,9 +142,17 @@ Integrity
 
 Define a target payload budget (e.g., ≤ ~100 B) and compute it from the actual fields above (IDs/timestamps + N sensors × 5 stats + signature + flags). If the computed size for a given window exceeds the budget, enable `crt{m[], r[]}` for selected large numeric groups (e.g., multi-field stats), choosing moduli so that the product covers their range; Pi recombines to canonical values before bundling and Merkle hashing. This answers “How is the budget established to enable CRT?” → by summing concrete field sizes and switching CRT only when the sum exceeds the set budget. The choice can influence secondary/relay node planning due to processing/memory trade-offs.
 
+CRT is **optional**: if the calculated size remains under the budget, the node omits the `crt` field and transmits canonical integers directly. When the window threatens to overflow the limit (e.g., many sensors or high‑precision counts), the node selects pairwise coprime moduli \(m_i\) (e.g., \(97,101,103\)) whose product covers the numeric range and sends residues \(r_i = x \bmod m_i\). The Pi reconstructs \(x\) using the Chinese Remainder Theorem—typically via Garner’s algorithm—verifies that \(x < \prod m_i\), and restores the original integer before computing the Merkle hash. Thus CRT reduces wire size without changing the deterministic value hashed into the tree or seeding the blockchain.
+
 ### Hand-off to Tier 2
 
 The leaf transmits the compact window summary (and any urgent events) to the nearest Pi gateway, which verifies/deduplicates and stages by `window_id` for bundling and Merkle-root computation downstream.
+
+For each payload \(P_i\) the gateway computes a cryptographic hash
+\[ h_i = H(P_i) \]
+using a function such as SHA-256, yielding the Merkle tree leaves. Hashes are paired and folded iteratively,
+\[ h_{i,j} = H(h_{2i} \Vert h_{2i+1}) \]
+until a single root \(R\) remains. The inaugural root \(R_0\) seeds the ledger by forming the first block \(B_0=(R_0, t_0)\), and each subsequent window contributes a new root \(R_k\) appended as block \(B_k\). This process both compacts Tier 1 data and begins the blockchain.
 
 ### Reviewer alignment (Tier 1)
 
