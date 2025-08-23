@@ -210,27 +210,55 @@ flowchart TB
   subgraph T2["Tier 2 — Raspberry Pi Gateway\n(Ingest • Verify • Bundle • Schedule)"]
     direction TB
 
-    INGRESS["IngressService\n• Verify HMAC/Ed25519\n• Dedupe (device_id, seq/window)\n• CRT recombination (Garner)\n• /metrics: ingress_packets_total, duplicates_total, drops_total, ingress_latency_seconds"]:::box
+    %% Ingress pipeline
+    subgraph IN["Ingress"]
+      direction TB
+      VER["Verify HMAC/Ed25519"]:::proc
+      DEDUPE["De-duplicate\n(device_id + seq/window)"]:::proc
+      CRT["CRT recombination\n(Garner)"]:::proc
+      STAGE["Stage by window_id"]:::proc
+      VER --> DEDUPE --> CRT --> STAGE
+    end
 
-    BUNDLER["Bundler\n• Build IntervalBundle / EventBundle\n• Compute merkle_root per bundle\n• /metrics: bundle_latency_seconds, events_rate_limited_total"]:::box
+    %% Bundle creation
+    subgraph BD["Bundler"]
+      direction TB
+      BUILD["Assemble Interval/Event Bundles"]:::proc
+      HASH["Compute merkle_root"]:::proc
+      BUILD --> HASH
+    end
 
-    SOF["StoreAndForward\n• Durable queue in STORE_DIR\n• Retry with backoff + jitter\n• /metrics: store_backlog_files"]:::box
+    %% Durable queue with retries
+    subgraph SF["Store & Forward"]
+      direction TB
+      QUEUE["Durable queue\nSTORE_DIR"]:::box
+      RETRY["Retry with backoff + jitter"]:::box
+      QUEUE --> RETRY
+    end
 
-    SCHED["Scheduler\n• Submit IntervalBundle on cadence (30–120 min)\n• Submit EventBundle immediately\n• Parameters are critical — justify in policy"]:::box
+    %% Submission scheduling
+    subgraph SCH["Scheduler"]
+      direction TB
+      INTERVAL["Interval submit\n(30–120 min)"]:::proc
+      EVENT["Event submit\nimmediate"]:::proc
+    end
 
-    %% Flow
-    INGRESS --> BUNDLER --> SOF --> SCHED
+    %% Flow between groups
+    STAGE --> BUILD
+    HASH --> QUEUE
+    RETRY --> INTERVAL
+    RETRY --> EVENT
 
-    %% Explicit Merkle step and submit
-    MR["Merkle Tree\nleaf: item hash → root: merkle_root"]:::proc
-    BUNDLER --> MR
-
-    TX["Fabric client submit\n(summary + merkle_root)"]:::proc
-    SCHED --> TX
+    %% Merkle hashing and Fabric submit
+    HASH --> MR["Merkle Tree\nleaf: item hash → root: merkle_root"]:::proc
+    INTERVAL --> TX["Fabric client submit\n(summary + merkle_root)"]:::proc
+    EVENT --> TX
 
     %% Bundle schemas (make merkle_root explicit)
     IB["IntervalBundle fields:\n{bundle_id, window_id, readings[], created_ts, count, merkle_root}"]:::data
     EB["EventBundle fields:\n{bundle_id, events[{device_id, ts, type, before[], after[], thresholds}], created_ts, merkle_root}"]:::data
+    HASH --> IB
+    HASH --> EB
 
     %% On-chain mapping (what Tier 4 stores/indexes)
     ONCHAIN["On-chain keys:\nreading:device_id:window_id → summary + merkle_root\nevent:device_id:ts → event details"]:::data
