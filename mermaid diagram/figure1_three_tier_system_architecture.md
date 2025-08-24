@@ -10,6 +10,8 @@ Each tier now has its own standalone Mermaid diagram for clarity. Tier 1 and Tie
 - [Tier 3 (Mesh/Link)](#tier-3-meshlink)
 - [Tier 4 (Hyperledger Fabric)](#tier-4-hyperledger-fabric)
 - [Tier 5 (Observability & Ops)](#tier-5-observability--ops)
+- [Node Scheme without CRT](#node-scheme-without-crt)
+- [Node Scheme with CRT](#node-scheme-with-crt)
 
 ## All Tiers — End-to-End Overview
 
@@ -887,3 +889,31 @@ allowing spatial statistics such as mean temperature T̄ = (1/m) Σ_{j=1}^m T_j 
    `reading:device_id:window_id → {summary, merkle_root, writer_msp}`,
    and append \(B_k\) to the immutable ledger linking by
    \(\text{PrevHash}_{k-1} = H(B_{k-1})\).
+## Node Scheme without CRT
+
+When sensor payloads stay within the 100 B budget, nodes transmit summaries directly without Chinese Remainder Theorem (CRT) residues. Data flows through the tiers unmodified.
+
+```mermaid
+flowchart LR
+  subgraph Leaf["Sensor Node"]
+    S[Collect stats]\n    S --> P[Package JSON\nno CRT]
+  end
+  P --> G["Pi Gateway"]
+  G --> M["Mesh Network"]
+  M --> L["Hyperledger Fabric"]
+```
+
+## Node Scheme with CRT
+
+If the byte count exceeds the budget, the node encodes large integers using CRT residues. The gateway reconstructs the values before bundling, after which the flow rejoins the same architecture.
+
+```mermaid
+flowchart LR
+  subgraph LeafCRT["Sensor Node with CRT"]
+    S2[Collect stats]\n    S2 --> C[Encode residues m[], r[]]
+    C --> P2[Package JSON + CRT]
+  end
+  P2 --> G2["Pi Gateway\nreconstruct integers"]
+  G2 --> M2["Mesh Network"]
+  M2 --> L2["Hyperledger Fabric"]
+```
