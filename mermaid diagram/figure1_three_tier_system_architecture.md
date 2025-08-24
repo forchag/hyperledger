@@ -891,29 +891,78 @@ allowing spatial statistics such as mean temperature T̄ = (1/m) Σ_{j=1}^m T_j 
    \(\text{PrevHash}_{k-1} = H(B_{k-1})\).
 ## Node Scheme without CRT
 
-When sensor payloads stay within the 100 B budget, nodes transmit summaries directly without Chinese Remainder Theorem (CRT) residues. Data flows through the tiers unmodified.
+When sensor payloads stay within the 100 B budget, nodes transmit summaries directly without Chinese Remainder Theorem (CRT) residues. The JSON payload moves through Tier 2’s Ingress → Bundler → Scheduler, crosses the mesh (Tier 3), and is finally ordered and committed in Tier 4.
 
 ```mermaid
 flowchart LR
-  subgraph Leaf["Sensor Node"]
-    S[Collect stats]\n    S --> P[Package JSON\nno CRT]
+  %% ===== NODE WITHOUT CRT =====
+  subgraph T1["Tier 1 — Sensor Node"]
+    direction TB
+    S[Collect sensor stats]
+    P[Package JSON\n<100 B, no CRT]
+    S --> P
   end
-  P --> G["Pi Gateway"]
-  G --> M["Mesh Network"]
-  M --> L["Hyperledger Fabric"]
+
+  subgraph T2["Tier 2 — Pi Gateway"]
+    direction TB
+    IN[Ingress\nverify sig · dedupe]
+    BN[Bundler\nassemble IntervalBundle]
+    SCH[Scheduler\nstore & forward]
+    IN --> BN --> SCH
+  end
+
+  subgraph T3["Tier 3 — Mesh/Link"]
+    direction TB
+    MH[Mesh hop(s)\nBATMAN-adv + wg0]
+  end
+
+  subgraph T4["Tier 4 — Fabric"]
+    direction TB
+    ORD[Orderer]
+    PEER[Peer\nendorse → commit]
+    ORD --> PEER
+  end
+
+  P -- "window summary JSON" --> IN
+  SCH -- "gRPC/TLS" --> MH -- "deliver bundle" --> ORD
 ```
 
 ## Node Scheme with CRT
 
-If the byte count exceeds the budget, the node encodes large integers using CRT residues. The gateway reconstructs the values before bundling, after which the flow rejoins the same architecture.
+If the byte count exceeds the budget, the node encodes large integers as residue/modulus pairs. Tier 2’s Ingress verifies the signature and uses Garner reconstruction to recover canonical integers before bundling and scheduling.
 
 ```mermaid
 flowchart LR
-  subgraph LeafCRT["Sensor Node with CRT"]
-    S2[Collect stats]\n    S2 --> C[Encode residues m[], r[]]
-    C --> P2[Package JSON + CRT]
+  %% ===== NODE WITH CRT =====
+  subgraph T1C["Tier 1 — Sensor Node (CRT)"]
+    direction TB
+    S2[Collect sensor stats]
+    CRT[Encode residues m[], r[]]
+    J2[Package JSON + residues]
+    S2 --> CRT --> J2
   end
-  P2 --> G2["Pi Gateway\nreconstruct integers"]
-  G2 --> M2["Mesh Network"]
-  M2 --> L2["Hyperledger Fabric"]
+
+  subgraph T2C["Tier 2 — Pi Gateway"]
+    direction TB
+    IN2[Ingress\nverify sig]
+    DEC[Reconstruct integers\n(Garner)]
+    BN2[Bundler\ncompute merkle_root]
+    SCH2[Scheduler]
+    IN2 --> DEC --> BN2 --> SCH2
+  end
+
+  subgraph T3C["Tier 3 — Mesh/Link"]
+    direction TB
+    MH2[Mesh hop(s)\nBATMAN-adv + wg0]
+  end
+
+  subgraph T4C["Tier 4 — Fabric"]
+    direction TB
+    ORD2[Orderer]
+    PEER2[Peer]
+    ORD2 --> PEER2
+  end
+
+  J2 -- "JSON + CRT residues" --> IN2
+  SCH2 -- "gRPC/TLS" --> MH2 -- "deliver bundle" --> ORD2
 ```
