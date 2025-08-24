@@ -934,35 +934,36 @@ If the byte count exceeds the budget, the node encodes large integers as residue
 ```mermaid
 flowchart LR
   %% ===== NODE WITH CRT =====
-  subgraph T1C["Tier 1 — Sensor Node (CRT)"]
+  subgraph T1C["Tier 1 - Sensor Node CRT"]
     direction TB
     S2[Collect sensor stats]
-    CRT[Encode residues m[], r[]]
-    J2[Package JSON + residues]
+    CRT[Encode residues m&#91;&#93; and r&#91;&#93;]
+    J2[Package JSON and residues]
     S2 --> CRT --> J2
   end
 
-  subgraph T2C["Tier 2 — Pi Gateway"]
+  subgraph T2C["Tier 2 - Pi Gateway"]
     direction TB
-    IN2[Ingress\nverify sig]
-    DEC[Reconstruct integers\n(Garner)]
-    BN2[Bundler\ncompute merkle_root]
+    IN2[Ingress<br/>verify signature]
+    DEC[Reconstruct integers<br/>Garner method]
+    BN2[Bundler<br/>compute merkle root]
     SCH2[Scheduler]
     IN2 --> DEC --> BN2 --> SCH2
   end
 
-  subgraph T3C["Tier 3 — Mesh/Link"]
+  subgraph T3C["Tier 3 - Mesh or Link"]
     direction TB
-    MH2[Mesh hop(s)\nBATMAN-adv + wg0]
+    MH2[Mesh hops<br/>BATMAN adv and wg0]
   end
 
-  subgraph T4C["Tier 4 — Fabric"]
+  subgraph T4C["Tier 4 - Fabric"]
     direction TB
     ORD2[Orderer]
     PEER2[Peer]
     ORD2 --> PEER2
   end
 
-  J2 -- "JSON + CRT residues" --> IN2
-  SCH2 -- "gRPC/TLS" --> MH2 -- "deliver bundle" --> ORD2
+  J2 -- JSON and CRT residues --> IN2
+  SCH2 -- grpc over tls --> MH2 -- deliver bundle --> ORD2
+
 ```
