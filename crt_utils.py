@@ -19,11 +19,22 @@ def crt_value(residues: List[int]) -> float:
 
 
 def select_moduli(node_count: int, memory_bytes: int) -> List[int]:
-    """Recommend a CRT moduli set based on network size and device memory.
+    """Recommend a CRT moduli set based on node population and memory budget.
 
-    The heuristic balances the number of secondary nodes against available
-    memory per device.  Smaller memories use fewer, smaller moduli to reduce
-    residue size, while larger memories can afford a wider numeric range.
+    Each additional modulus yields another residue per reading.  Secondary
+    nodes that must relay many readings therefore pay a memory penalty for
+    wider numeric ranges.  To keep payloads small, this function divides the
+    available RAM across the expected number of nodes and chooses a threshold
+    band:
+
+    * ``<32 KiB`` per node – two primes ``[97, 101]``
+    * ``32–64 KiB`` – three primes ``[97, 101, 103]``
+    * ``>64 KiB`` – four primes ``[97, 101, 103, 107]``
+
+    These primes are just above 100 so each residue fits in one byte, keeping
+    per-reading memory roughly proportional to the number of moduli.  Staying
+    within the recommended bands lets secondary nodes forward traffic with
+    low latency and minimal queuing.
     """
 
     per_node = memory_bytes // max(1, node_count)
