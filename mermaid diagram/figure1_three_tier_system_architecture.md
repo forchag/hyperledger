@@ -110,8 +110,28 @@ What each lever changes:
 | Mesh hops | Node spacing, links | \(H \cdot t_h\) term, PDR | `per_hop_latency_ms`, `mesh_neighbors` | Tier 3 |
 | Bundle size | Window length, filters | Queue time \(T_q\), ledger/day | `bundle_latency_seconds`, on-chain bytes/day | Tier 2/4 |
 | CRT on leaf | Budget threshold + moduli set | Packet size, relay count/memory | payload bytes calc, success of Garner recombination | Tier 1/2 |
+| Nodes vs memory | Leaf node count vs RAM/device | Secondary node pressure, residue size | `memory_available_bytes`, latency p95 | Tier 1 |
 
+Use performance metrics to balance sensor population against available memory.
+Let ``M`` be device RAM and ``N`` the expected number of leaf nodes that a
+secondary node must relay.  The available memory per node is ``M/N``; this
+value determines how many residues can be carried without pushing queues or
+causing garbage collection pauses on the relays.  The `select_moduli` utility
+encodes this heuristic into three bands:
 
+<32 KiB → ``[97,101]`` (two residues, ≈2 B/reading)
+32–64 KiB → ``[97,101,103]`` (three residues, ≈3 B/reading)
+>64 KiB → ``[97,101,103,107]`` (four residues, ≈4 B/reading)
+
+Example: with 20 sensors sending 1 reading/min and a secondary Pi with 512 KiB
+free memory, ``512 KiB / 20 ≈ 25 KiB`` → choose ``[97,101]``.  Each extra modulus
+adds one byte per reading per hop, so exceeding the recommended band quickly
+multiplies buffer pressure and increases latency.  Track `memory_available_bytes`
+alongside queue metrics such as `bundle_latency_seconds` to verify the chosen
+band maintains low delay.
+
+Keeping per-node memory within these bands enables secondary nodes to sustain
+low latency and avoid backpressure during bursts.
 
 ### SLOs, Alerts & Readiness Contracts
 
