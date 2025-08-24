@@ -110,8 +110,12 @@ What each lever changes:
 | Mesh hops | Node spacing, links | \(H \cdot t_h\) term, PDR | `per_hop_latency_ms`, `mesh_neighbors` | Tier 3 |
 | Bundle size | Window length, filters | Queue time \(T_q\), ledger/day | `bundle_latency_seconds`, on-chain bytes/day | Tier 2/4 |
 | CRT on leaf | Budget threshold + moduli set | Packet size, relay count/memory | payload bytes calc, success of Garner recombination | Tier 1/2 |
+| Nodes vs memory | Leaf node count vs RAM/device | Secondary node pressure, residue size | `memory_available_bytes`, latency p95 | Tier 1 |
 
-
+Use performance metrics to balance sensor population against available memory.
+The `select_moduli` utility chooses a threshold moduli set per device:
+<32 KB → `[97,101]`, 32–64 KB → `[97,101,103]`, >64 KB → `[97,101,103,107]`.
+Keeping per-node memory within these bands enables secondary nodes to sustain low latency and low delay.
 
 ### SLOs, Alerts & Readiness Contracts
 
