@@ -896,35 +896,35 @@ When sensor payloads stay within the 100 B budget, nodes transmit summaries di
 ```mermaid
 flowchart LR
   %% ===== NODE WITHOUT CRT =====
-  subgraph T1["Tier 1 — Sensor Node"]
+  subgraph T1["Tier 1 - Sensor Node"]
     direction TB
     S[Collect sensor stats]
-    P[Package JSON\n<100 B, no CRT]
+    P[Package JSON<br/>size under 100 B, no CRT]
     S --> P
   end
 
-  subgraph T2["Tier 2 — Pi Gateway"]
+  subgraph T2["Tier 2 - Pi Gateway"]
     direction TB
-    IN[Ingress\nverify sig · dedupe]
-    BN[Bundler\nassemble IntervalBundle]
-    SCH[Scheduler\nstore & forward]
+    IN[Ingress<br/>verify signature, dedupe]
+    BN[Bundler<br/>assemble interval bundle]
+    SCH[Scheduler<br/>store and forward]
     IN --> BN --> SCH
   end
 
-  subgraph T3["Tier 3 — Mesh/Link"]
+  subgraph T3["Tier 3 - Mesh or Link"]
     direction TB
-    MH[Mesh hop(s)\nBATMAN-adv + wg0]
+    MH[Mesh hops<br/>BATMAN adv and wg0]
   end
 
-  subgraph T4["Tier 4 — Fabric"]
+  subgraph T4["Tier 4 - Fabric"]
     direction TB
     ORD[Orderer]
-    PEER[Peer\nendorse → commit]
+    PEER[Peer<br/>endorse to commit]
     ORD --> PEER
   end
 
-  P -- "window summary JSON" --> IN
-  SCH -- "gRPC/TLS" --> MH -- "deliver bundle" --> ORD
+  P -- window summary JSON --> IN
+  SCH -- grpc over tls --> MH -- deliver bundle --> ORD
 ```
 
 ## Node Scheme with CRT
