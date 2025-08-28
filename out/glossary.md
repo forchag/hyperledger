@@ -1,0 +1,4 @@
+- **CRT**: Chinese Remainder Theorem
+- **PBFT**: Practical Byzantine Fault Tolerance
+- **RAFT**: Replicated State Machine protocol
+- **QoS**: Quality of Service
