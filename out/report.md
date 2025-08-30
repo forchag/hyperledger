@@ -1,5 +1,6 @@
 \documentclass[12pt,onecolumn]{IEEEtran} % single-column, 12pt font
 
+
 % --- Set 1-inch margins ---
 \usepackage[margin=1in]{geometry}
 
@@ -32,6 +33,7 @@
 % --- Tables: fit-to-page helper ---
 \usepackage{adjustbox}
 \newcommand{\fitToPage}[1]{\begin{adjustbox}{max width=\textwidth}#1\end{adjustbox}}
+
 \setlength{\tabcolsep}{6pt}
 \renewcommand{\arraystretch}{1.2}
 
