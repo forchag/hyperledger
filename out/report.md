@@ -1103,4 +1103,4 @@ The authors would like to thank the researchers whose work contributed to this c
 \bibliographystyle{IEEEtran}
 \bibliography{references}
 
-\end{document}>>
+\end{document}
