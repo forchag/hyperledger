@@ -78,17 +78,59 @@ Based on recent deployments and evaluations, we expect:
 \label{sec:roadmap}
 Section~\ref{sec:rqs-slos} states the research questions, SLOs and hypotheses and introduces macros for our current numbers (to be set from Caliper). Section~\ref{sec:metric-decision} ties each metric to an operational decision (irrigation, alerting and traceability) with citations and SLO comparisons. Section~\ref{sec:contrib-box} highlights the paper’s contributions vs. prior art (CRT residues, hierarchical consensus, daily anchoring, observability). Section~\ref{sec:part23-numbers} quantifies expected wins and trade‑offs (p95 $L$, tx/s, storage, energy). A dedicated math section (Part~III) follows, deriving the batch‑queuing/latency impacts of CRT partitioning and giving closed‑form residue reconstruction bounds.
 
+
 \section{System Overview and Experimental Design}
 
 \subsection{Architecture Summary}
 ESP32 sensors perform local filtering/thresholding and forward measurements over LoRa to Raspberry Pi gateways that act as Fabric peers. Readings are scaled and compressed into short residues via CRT; residues are signed (RSA-CRT, compact 33~B signature) and submitted as Fabric transactions. A daily Merkle root anchor is committed to enable long-horizon verification across batches. Gateways form a fault-tolerant mesh and can assume neighbor duties upon failure, keeping ingestion continuous. (\emph{See Part II, Sec.~6.2 for placement effects in hierarchical topologies and Part III, Sec.~9.1 for precision-ag requirements.}) % AGENT TODO: Insert a small block diagram reference when figures are finalized.
 
 \subsubsection{Communication and Data Flow}
-The complete data path from leaf sensors to the blockchain follows the sequence outlined in the communication diagrams.  An ESP32 sensor periodically collects raw measurements (temperature, humidity, soil moisture, pH) and performs simple thresholding before transmitting over LoRa to a gateway.  Each gateway runs an ``Ingress'' service that authenticates the sensor, verifies a lightweight AES-128 signature and decodes the payload.  Verified readings are packaged into an \textit{AgriBlock} record containing the sensor ID, timestamp, aggregated window features (minimum, maximum, mean and standard deviation) and the CRT residues.  These records are forwarded to a \textit{Bundler} which accumulates transactions for batching, targets a message size of \textasciitilde{}100~bytes and optimizes the on-chain footprint by compressing into CRT residues as described later.  A \textit{Scheduler} then orders bundles and distributes them via a mesh overlay to the next-hop orderer using gRPC/TLS~1.3; reliability targets for each hop (readings $>$99\%, bundle drops $<$1\%, jitter $<$50~ms) are monitored by a dedicated metrics service【997445152923737†L21-L66】.  Once received by the orderer, transactions are sequenced into blocks that satisfy the chaincode endorsement policy and are broadcast to peers for validation.  Peers execute the chaincode, check the Merkle proof and CRT signature, append valid transactions to the ledger and expose performance counters to Prometheus.  Operators and researchers can query metrics via the dashboard and react to alerts (e.g., high drop rate or latency) through an integrated alert manager【997445152923737†L21-L66】.  This end-to-end path ensures integrity and accountability for each sensor report while enabling fine-grained observability across the IoT-to-blockchain pipeline.
+The complete data path from leaf sensors to the blockchain follows the sequence outlined in the communication diagrams.  An ESP32 sensor periodically collects raw measurements (temperature, humidity, soil moisture, pH) and performs simple thresholding before transmitting over LoRa to a gateway.  Each gateway runs an ``Ingress'' service that authenticates the sensor, verifies a lightweight AES-128 signature and decodes the payload.  Verified readings are packaged into an \textit{AgriBlock} record containing the sensor ID, timestamp, aggregated window features (minimum, maximum, mean and standard deviation) and the CRT residues.  These records are forwarded to a \textit{Bundler} which accumulates transactions for batching, targets a message size of \textasciitilde{}100~bytes and optimizes the on-chain footprint by compressing into CRT residues as described later.  A \textit{Scheduler} then orders bundles and distributes them via a mesh overlay to the next-hop orderer using gRPC/TLS~1.3; reliability targets for 
+each hop (readings $>$99\%, bundle drops $<$1\%, jitter $<$50~ms) are monitored by a dedicated metrics service【997445152923737†L21-L66】.  Once received by the orderer, transactions are sequenced into blocks that satisfy the chaincode endorsement policy and are broadcast to peers for validation.  Peers execute the chaincode, check the Merkle proof and CRT signature, append valid transactions to the ledger and expose performance counters to Prometheus.  Operators and researchers can query metrics via the dashboard and react to alerts (e.g., high drop rate or latency) through an integrated alert manager【997445152923737†L21-L66】.  This end-to-end path ensures integrity and accountability for each sensor report while enabling fine-grained observability across the IoT-to-blockchain pipeline.
+
+\paragraph{Numbered Data Path (step-by-step).}
+The pipeline can be decomposed into a clear sequence of operations:
+\begin{enumerate}
+  \item \textbf{Sensing and local preprocessing.}  Each ESP32 node samples soil moisture, temperature, humidity and pH at configurable intervals (default 30~min) and applies simple thresholding/aggregation【150098335709152†L83-L90】.  Numeric fields are partitioned into residues via the Chinese Remainder Theorem (CRT), signed and encrypted with AES-128.
+  \item \textbf{Uplink to gateways.}  Sensor packets are transmitted over LoRa to a Raspberry~Pi gateway.  The gateway authenticates the sensor using stored certificates, decrypts the payload and reconstructs floating‑point values.  This ``ingress'' logic mirrors the data‑integrity pipeline described by Kim et~al., where the gateway retrieves certificates and decodes sensor messages prior to further processing【789881789179321†L319-L360】.
+  \item \textbf{Bundling and scheduling.}  An application module (Bundler) accumulates verified records into small batches (10--50 transactions or $\sim$100~B per bundle) and computes per‑bundle features (min/mean/max).  A Scheduler then orders the bundles based on a fair queue discipline and forwards them via a mesh overlay to the nearest ordering service【789881789179321†L319-L360】.
+  \item \textbf{Ordering and block formation.}  The ordering service enqueues bundles and assembles them into blocks according to a configured block size (default 50 transactions) and timeout (1~s).  This step is analogous to the ordering phase in Hyperledger Fabric where latency remains under 2~s for typical block sizes【93112315127395†L1052-L1090】.
+  \item \textbf{Endorsement and validation.}  Endorsing peers execute chaincode against the current ledger state, verify CRT signatures and Merkle proofs, and emit endorsement signatures.  Committing peers validate endorsements, write valid transactions to the ledger and expose metrics via Prometheus【789881789179321†L319-L360】.
+  \item \textbf{Off‑chain storage and anchoring.}  Transaction payloads are stored in an InterPlanetary File System (IPFS) cluster; only the content identifiers and Merkle roots are kept on‑chain.  Daily anchors commit Merkle roots to a public chain, preserving auditability while saving storage【912353834466623†L790-L800】.
+\end{enumerate}
+Our pipeline follows the five‑tier architecture outlined by Kim et~al.【789881789179321†L319-L360】 but introduces CRT residue compression, flexible batch sizing and daily anchoring.  These choices reduce payload size and on‑chain cost compared with the fully on‑chain storage and immediate anchoring used in prior art.
+
+\paragraph{Components and Roles.}
+Table~\ref{tab:components} summarizes the key components, their responsibilities, expected inputs and outputs, common failure modes and corresponding recovery strategies.  Each row is supported by literature describing typical behavior or failure recovery.
+
+\begin{table*}[!t]
+  \centering
+  \caption{System components and their roles, inputs, outputs, and failure handling.}
+  \label{tab:components}
+  \begin{tabular}{p{2.5cm}p{3cm}p{2.7cm}p{2.7cm}p{3cm}p{3cm}}
+    \toprule
+    \textbf{Component} & \textbf{Role} & \textbf{Inputs} & \textbf{Outputs} & \textbf{Failure modes} & \textbf{Recovery} \\
+    \midrule
+    Sensor (ESP32) & Collects environmental metrics (moisture, temperature, pH) and performs local thresholding. & Analog sensor readings; local thresholds. & Filtered measurements and CRT residues. & Battery depletion; miscalibration; local memory overflow. & Low‑power mode; recalibration; drop old buffers.  (cf.~OneSoil sensors reporting every 30~min【150098335709152†L83-L90】.) \\
+    Gateway (Raspberry~Pi) & Authenticates sensors, decodes payloads, aggregates records, signs bundles. & LoRa frames; certificates; sensor registry. & Bundled \emph{AgriBlock} records for ordering. & Network drop; CPU overload; storage exhaustion. & Buffering with persistent queues; neighbor takeover; periodic flushing to IPFS【789881789179321†L319-L360】. \\
+    Scheduler/Orderer & Orders incoming bundles into blocks using configured size/timeouts. & Batches from gateways. & Ordered blocks of transactions. & Queue buildup; consensus timeout; block overflow. & Adjust block timeout; split bundles; back‑pressure gating【93112315127395†L1052-L1090】. \\
+    Endorsing peer & Executes chaincode, verifies signatures/proofs, endorses transactions. & Ordered transactions; world state. & Endorsement signatures. & State database crash; chaincode errors. & Restart peer and resynchronize state from orderer; apply chaincode patches【378922995287829†L972-L977】. \\
+    Committing peer & Validates and commits blocks to the ledger. & Endorsed blocks. & Updated ledger; events. & Disk failure; ledger corruption. & Ledger snapshot restore; catch‑up from latest checkpoint【378922995287829†L972-L977】. \\
+    IPFS cluster & Stores off‑chain payloads; returns content identifiers (CIDs). & Bundled payloads; metadata. & CIDs; retrieval endpoints. & Data unavailability; network partition. & Replicate across multiple IPFS nodes; fallback to gateway cache【912353834466623†L790-L800】. \\
+    Certificate Authority (CA) & Issues X.509 certificates and manages enrolment/identity. & Registration requests; identity proofs. & Certificates; CRLs. & Private key compromise; mis‑issuance. & Revoke and reissue certificates; rotate CA keys【378922995287829†L972-L977】. \\
+    \bottomrule
+  \end{tabular}
+  % AGENT TODO: Link each component to the corresponding implementation path in the repo (e.g., \texttt{gateway/ingress.py}).
+\end{table*}
 
 \subsection{Workloads and Metrics}
 We evaluate end-to-end latency ($L$), throughput (tx/s), jitter ($J$), reliability ($R=\Pr\{D\le D_{\max}\}$), availability (SLO-compliant uptime), and resource/energy overheads (CPU, memory, RPi power draw).\ % AGENT TODO: Add measurement tool references (e.g., Grafana exporters / Fabric metrics endpoints) if used.
-Workloads emulate (i) periodic reporting every 30~min (decision window of 1800~s) and (ii) event-triggered bursts (e.g., irrigation threshold crossings). We vary sensor population, CRT partition counts, batch sizes/timeouts, and link impairments to probe limits (\emph{Part II, Sec.~8.1} on QoS targets).
+Workloads emulate two classes of traffic:
+\begin{itemize}
+  \item \emph{Periodic reporting.}  Each sensor reports at 30~min intervals (1800~s window), consistent with commercial moisture sensors such as OneSoil’s agronomy sensor which measures soil moisture and sends readings via SIM card every half hour【150098335709152†L83-L90】.  With 100 sensors per gateway this yields roughly 3.3~tx/min.
+  \item \emph{Event‑driven bursts.}  Threshold crossings (e.g., frost alarms) trigger immediate reports; a burst may comprise 10–20 transactions within a few seconds.
+\end{itemize}
+We tune CRT partition counts, batch sizes and timeouts to meet the SLOs.  Bundles contain 10–50 transactions (≈100~B) and the orderer timeout is 0.5–1~s, reflecting Fabric experiments that keep average latency under 2~s for block sizes up to 50【93112315127395†L1052-L1090】.  The reliability threshold $D_{\max}$ is set to 5~s (i.e., 99\% of commits must complete within 5~s), which is stricter than the 3.184~s finalization reported in a food‑safety deployment【378922995287829†L972-L977】 and more generous than the sub‑second latencies observed in lightweight consensus evaluations【912353834466623†L698-L718】.  These workloads stress sensor and gateway capacities while aligning with typical agricultural sampling frequencies and IoT‑blockchain benchmarks.
 
 \subsubsection{Latency Pipeline and Measurement Metrics}
 Following the latency breakdown described in our evaluation plan, the end-to-end delay $L$ is decomposed into constituent stages: $L_{\text{read}}$ (sensor reading and local processing), $L_{\text{wifi}}$ or $L_{\text{LoRa}}$ (wireless transmission to gateway), $L_{\text{ingress}}$ (authentication and verification at the gateway), $L_{\text{bundle\_wait}}$ (queuing in the bundler until batch criteria met), $L_{\text{sched}}$ (scheduling and ordering delays), $L_{\text{mesh}}$ (multi-hop propagation through the overlay), and $L_{\text{commit}}$ (ordering, endorsement, validation and block commit)【154183463579069†L40-L63】.  Event-driven bursts are dominated by commit delay whereas periodic flows are often bound by bundling wait time.  We compute jitter $J$ as the variance of inter-arrival delays at the application layer, and reliability $R$ as the fraction of reports whose latency does not exceed a threshold $D_{\max}$.
@@ -100,13 +142,21 @@ The experimental campaign follows a series of tests to validate each component o
 
 \subsection{Baselines and Comparators}
 We compare:
+We evaluate four representative baselines and bind each to a concrete configuration:
 \begin{itemize}
-  \item Fabric default (\textit{baseline}, one stream, standard block batching).
-  \item Selective/lightweight consensus (\emph{Part II, Sec.~6.1}; e.g., selective paths for low-risk updates \cite{ali2022blockchainenabledarchitecture}).
-  \item DAG/hybrid designs (\emph{Part II, Sec.~6.3}; concurrency via DAG tips).
-  \item Reputation/credit-based leader selection (\emph{Part II, Sec.~6.4}; trust-weighted endorsement \cite{morais2023surveyonintegration}).
+  \item \textbf{Fabric default (baseline).}  Block size = 50 transactions; block timeout = 1~s; endorsement policy: any 2 of 3 peers.  This setup reflects the low‑latency configuration used in Fabric performance studies where latency remains below 2~s and throughput is maximized for moderate workloads【93112315127395†L1052-L1090】.  We expect this baseline to meet our SLOs with moderate energy use.
+  \item \textbf{Lightweight/Selective consensus (DPoS).}  We adopt a Delegated Proof of Stake (DPoS) variant with 33 delegates, block size 50, and a 0.5~s block interval.  Lightweight consensus reduces latency to about 0.976~ms compared with PoS latency of 55.4~ms at 500 nodes【912353834466623†L698-L718】 and conserves energy because only delegates participate in consensus【912353834466623†L751-L756】.  We expect high throughput but potential fairness concerns due to delegate selection.
+  \item \textbf{DAG/Hybrid design.}  We consider a DAG ledger (e.g., IOTA/Hedera) where transactions are appended concurrently and consensus emerges via tip selection.  Typical DAG networks achieve finality in 5–10~s and consume only 0.0001~kWh per transaction, orders of magnitude less than PoW blockchains (240–950~kWh)【728406706590210†L393-L399】.  We configure a tip confirmation threshold of 2 approvals and compare energy/latency trade‑offs.
+  \item \textbf{Reputation/Credit‑based.}  Nodes are ranked by historical behavior; leaders are selected by credit weights.  We set a dynamic block size of 20, endorsement threshold 0.7 (credit‑weighted majority) and a block timeout of 2~s.  Reputation mechanisms can improve fairness and resilience but add overhead to maintain trust scores; surveys on IoT‑blockchain consensus catalogue these schemes\cite{morais2023surveyonintegration}.
 \end{itemize}
-% AGENT TODO: Bind each comparator to a concrete configuration (batch timeout, endorsement policy, block size), citing the representative papers already captured in \texttt{references.bib}.
+
+\begin{figure}[!t]
+  \centering
+  % AGENT TODO: Replace the placeholder box with the final PNG/PDF of the pipeline overview.
+  \fbox{\rule{0pt}{1.5in}\rule{0.95\linewidth}{0pt}} % placeholder box for pipeline overview
+  \caption{Pipeline Overview: high‑level view of the sensor‑to‑ledger dataflow, including sensing, gateway ingestion, bundling, ordering, validation and off‑chain anchoring. The final diagram will be provided as a PNG/PDF.}
+  \label{fig:pipeline-overview}
+\end{figure}
 
 \section{Experimental Setup}
 
