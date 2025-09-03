@@ -78,7 +78,6 @@ Based on recent deployments and evaluations, we expect:
 \label{sec:roadmap}
 Section~\ref{sec:rqs-slos} states the research questions, SLOs and hypotheses and introduces macros for our current numbers (to be set from Caliper). Section~\ref{sec:metric-decision} ties each metric to an operational decision (irrigation, alerting and traceability) with citations and SLO comparisons. Section~\ref{sec:contrib-box} highlights the paper’s contributions vs. prior art (CRT residues, hierarchical consensus, daily anchoring, observability). Section~\ref{sec:part23-numbers} quantifies expected wins and trade‑offs (p95 $L$, tx/s, storage, energy). A dedicated math section (Part~III) follows, deriving the batch‑queuing/latency impacts of CRT partitioning and giving closed‑form residue reconstruction bounds.
 
-
 \section{System Overview and Experimental Design}
 
 \subsection{Architecture Summary}
@@ -157,6 +156,91 @@ We evaluate four representative baselines and bind each to a concrete configurat
   \caption{Pipeline Overview: high‑level view of the sensor‑to‑ledger dataflow, including sensing, gateway ingestion, bundling, ordering, validation and off‑chain anchoring. The final diagram will be provided as a PNG/PDF.}
   \label{fig:pipeline-overview}
 \end{figure}
+
+% ===========================================================================
+% Parameters & Scenarios section inserted here
+\section{Parameters \& Scenarios}
+\label{sec:params-scenarios}
+
+To facilitate reproducibility and highlight the trade‑offs across our design space, we define a suite of scenarios (S1–S6) spanning the key parameters: the number of CRT partitions $p$ (1,~2,~4), the bundling size (\emph{batch} = 10, 50, 100 transactions), the block timeout (0.1,~0.5,~2.0~s), the number of sensors per gateway (25,~100,~300) and the mesh loss rate (0,~1,~5 \%).  Table~\ref{tab:scenarios} summarizes the combinations; short notes indicate the expected behavior.
+
+\begin{table}[!t]
+  \centering
+  \caption{Final numeric sweeps used in our experiments.  Each scenario combines CRT partition count $p$, bundling size, block timeout, number of sensors per gateway, and loss rate.  Expected impacts are summarized qualitatively; detailed expectations are discussed in the text.}
+  \label{tab:scenarios}
+  \begin{tabular}{lccccc>{\raggedright\arraybackslash}p{4cm}}
+    \toprule
+    Scenario & $p$ & Batch & Timeout (s) & Sensors & Loss (\%) & Expected impact \\
+    \midrule
+    S1 & 1 & 10 & 0.1 & 25  & 0  & low latency; limited throughput \\
+    S2 & 2 & 50 & 0.5 & 100 & 1  & baseline; balanced latency/throughput \\
+    S3 & 4 & 100 & 2.0 & 300 & 5  & high throughput; elevated latency and queuing \\
+    S4 & 2 & 10 & 0.5 & 100 & 5  & small batches; resilient to loss \\
+    S5 & 4 & 50 & 0.1 & 25  & 1  & parallelism improves bundling; potential merge overhead \\
+    S6 & 1 & 100 & 2.0 & 300 & 0  & heavy batching; risk of timeouts \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Final numeric sweeps}
+\label{sec:numeric-sweeps}
+Each factor influences latency, reliability and energy in predictable ways:
+\begin{itemize}
+  \item \textbf{CRT partitions $p$.} Increasing the number of residues ($p$) allows multiple streams to be encoded in parallel and thus reduces the individual bundle size.  However, a very high $p$ can increase merge overhead and channel interleaving.  We therefore sweep $p\in\{1,2,4\}$ and expect diminishing latency up to the merge bound defined by the end‑to‑end equation $T_{\mathrm{e2e}}\approx T_q + H\,t_h + T_b + T_v$【75599086097404†L113-L120】.
+
+  \item \textbf{Batch size.} Larger batches amortize ordering and endorsement costs but keep transactions waiting longer in the gateway queue.  Prior work on Hyperledger Fabric shows that adding just one transaction to a block can increase the mean response time from 5 s to 60 s and that over‑sized blocks create bottlenecks in the ordering step【17736944026050†L908-L915】.  We examine batches of 10,~50 and 100 transactions; smaller batches should meet the \SLOpL{} target more easily, while larger batches may offer higher throughput but risk exceeding the p99 latency target.
+
+  \item \textbf{Block timeout.} The timeout controls how long the orderer waits before sealing a block.  Sensitivity analysis on Fabric shows that the timeout has the largest effect on mean response time and interacts strongly with block size【17736944026050†L934-L978】.  Short timeouts (0.1~s) form mostly partial blocks and minimize latency; long timeouts (2.0~s) yield more complete blocks but risk queueing delays and high jitter.
+
+  \item \textbf{Sensors per gateway.} Scaling the number of sensors from 25 to 300 increases the arrival rate and may saturate the gateway and network.  The evaluation document notes that commit latency grows from roughly 1–2~s with two gateways to 10–15~s with 100 gateways【267957236945590†L240-L267】; similarly, more sensors per gateway can strain the ordering service.  We therefore vary sensor counts to reflect small farms (25 sensors), typical orchards (100 sensors), and large deployments (300 sensors).
+
+  \item \textbf{Loss rate.} We inject controlled mesh loss (0, 1 and 5 \%) to test resilience.  The communications metrics define drop and duplicate rates and recommend alerting operators when loss exceeds 1 \%【267957236945590†L356-L367】.  Higher loss rates increase retries and may lower reliability, forcing smaller batches or redundant paths.
+\end{itemize}
+
+These sweeps are exercised across six scenarios (Table~\ref{tab:scenarios}) to observe the joint impact of parameters on the measured QoS metrics.  Placeholder charts summarizing the sweeps will be inserted here once the experiments have completed.  Each figure will depict latency, throughput and reliability across the parameter grid.
+
+\begin{figure}[!t]
+  \centering
+  % AGENT TODO: Insert numeric sweep results for latency/throughput vs. batch/timeout here.  Provide PNGs after data collection.
+  \fbox{\rule{0pt}{1.75in}\rule{0.95\linewidth}{0pt}} % placeholder for numeric sweep plots
+  \caption{Placeholder for latency and throughput sweeps across scenarios S1–S6.  Solid lines will depict p95/p99 latency (left y‑axis) and dotted lines will depict throughput (right y‑axis) as a function of batch size and timeout.}
+  \label{fig:sweep-results}
+\end{figure}
+
+\subsection{Sensitivity plan}
+\label{sec:sensitivity}
+Parameter studies underscore how finely balanced the Fabric tuning must be.  Sensitivity analysis using Stochastic Petri Nets shows that the timeout has the largest effect on mean response time, with block size following closely【17736944026050†L934-L978】.  As the timeout increases, the trigger rate by timeout decreases and the system forms more complete blocks, but queuing delays and variability also rise.  Conversely, very short timeouts (<0.1~s) cause partial blocks and underutilize the ordering service, limiting throughput.  We therefore predict: (i) latency decreases as $p$ increases until merge overhead nullifies gains (because more partitions reduce per‑partition bundle size); (ii) throughput scales roughly linearly with batch size until the ordering service saturates; (iii) latency variance grows sharply beyond the timeout “knee” identified in the DoE study【17736944026050†L908-L915】; and (iv) increasing sensors per gateway increases both end‑to‑end latency and energy consumption due to heavier network use【267957236945590†L240-L267】.
+
+\subsection{Reliability formula}
+\label{sec:reliability-formula}
+We formalize reliability as the probability that the end‑to‑end latency does not exceed a deadline $D_{\max}$.  Let $L$ denote the random variable of measured latencies; then
+\begin{equation}
+  R = \Pr\{L \le D_{\max}\}.
+\end{equation}
+This empirical probability is estimated by collecting a sample of latencies, sorting them, and computing the cumulative distribution function (CDF).  The reliability at deadline $D_{\max}$ corresponds to the fraction of samples with $L \le D_{\max}$.  In practice, we record end‑to‑end latencies over multiple runs, build the empirical CDF, and compute $R$ for deadlines aligned with our SLO (e.g., $D_{\max}=2$~s for the p95 target).  This formulation matches the success ratio metric defined in the communications KPIs section of the evaluation document【267957236945590†L356-L364】.
+
+\subsection{Reproducibility note}
+\label{sec:reproducibility}
+All experiments are scripted and logged to facilitate replication.  For each scenario, gateways produce CSV and JSON files containing per‑transaction timestamps, sensor IDs, batch identifiers, latency breakdowns, retry counts, and power consumption.  Filenames embed the scenario ID (e.g., `S3_20250902_metrics.csv`) and a random seed used for workload generation; seeds are recorded in a separate YAML manifest.  Logs reside under the `out/metrics/` directory of the repository, alongside Jupyter notebooks for analysis.  A README in `out/metrics/` documents the schema and provides instructions for verifying results.  These practices follow common artifact‑evaluation guidelines for blockchain systems and ensure that results can be reproduced and audited.
+
+\subsection{Capacity \& retention}
+\label{sec:capacity-retention}
+Using the formulas from the Energy and Communications Metrics document, we estimate daily ledger sizes.  The number of bundles written to the mesh per day is $T_{\text{mesh\_day}} = B_{\text{cadence}} \times S_{\text{bundle}}$, where $B_{\text{cadence}}$ is the number of bundles per day and $S_{\text{bundle}}$ the average bundle size【267957236945590†L401-L416】.  The ledger growth per day across all gateways is $G_{\text{ledger\_day}} = N_{\pi} \times B_{\text{cadence}} \times \text{avg\_block\_bytes}$【267957236945590†L401-L416】.  Assuming each sensor produces a residue payload of roughly 150 bytes every 15 minutes (96 readings/day) and bundling overheads add negligible extra bytes, we estimate:
+\begin{itemize}
+  \item 25 sensors: $25 \times 96 \times 150 \approx 0.36$~MB per day per gateway.
+  \item 100 sensors: $100 \times 96 \times 150 \approx 1.44$~MB per day per gateway.
+  \item 300 sensors: $300 \times 96 \times 150 \approx 4.32$~MB per day per gateway.
+\end{itemize}
+For 5 gateways, the ledger grows by about 1.8~MB/day (25 sensors), 7.2~MB/day (100 sensors) and 21.6~MB/day (300 sensors).  These values are modest compared with public blockchains but underscore the importance of compaction: at 100 sensors/gateway, a 90‑day retention yields about 129~MB of ledger data.  Our retention policy mirrors the internal guideline: raw samples are kept for 30–90 days, while summary statistics and Merkle roots are preserved indefinitely【267957236945590†L418-L441】.  Daily Merkle anchoring and periodic pruning maintain a manageable storage footprint while enabling traceability.  Comparable IoT‑blockchain studies report similar on‑chain footprints, with hybrid IPFS/off‑chain storage cutting on‑chain data by up to 95 \%【17736944026050†L934-L978】.
+
+\begin{figure}[!t]
+  \centering
+  % AGENT TODO: Replace placeholder with diagram of capacity growth across sensors/gateways.  The final plot will be generated from the above calculations.
+  \fbox{\rule{0pt}{1.5in}\rule{0.95\linewidth}{0pt}} % placeholder for capacity chart
+  \caption{Placeholder for daily ledger growth vs. sensor count and number of gateways.  The bar chart will show how the ledger grows (MB/day) for 1 Pi node and 5 Pi nodes with 25, 100 and 300 sensors.}
+  \label{fig:capacity-growth}
+\end{figure}
+
 
 \section{Experimental Setup}
 
