@@ -1,0 +1,859 @@
+\documentclass[12pt]{article}
+\usepackage[margin=1in]{geometry}
+
+% --- Encoding & fonts (pdfLaTeX) ---
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+
+% --- Math & symbols ---
+\usepackage{amsmath,amssymb}
+\usepackage{textcomp}
+\usepackage{siunitx}
+\sisetup{detect-all}
+
+% --- Tables, graphics, floats ---
+\usepackage{graphicx}
+\usepackage{tabularx,booktabs,multirow,adjustbox,array,float}
+\usepackage{caption} % Added for better caption control
+
+% --- Colors, hyperlinks (with better URL breaking) ---
+\usepackage{xcolor}
+\PassOptionsToPackage{hyphens}{url}
+\usepackage{hyperref}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  filecolor=magenta,
+  urlcolor=cyan,
+  breaklinks=true
+}
+
+% --- Listings (YAML / JSON) ---
+\usepackage{listings}
+\lstdefinelanguage{json}{
+  basicstyle=\ttfamily\footnotesize,
+  showstringspaces=false,
+  breaklines=true,
+  columns=fullflexible,
+  morestring=[b]",
+  stringstyle=\color{black},
+  morecomment=[l]{//},
+  morecomment=[s]{/*}{*/},
+}
+\lstdefinelanguage{yaml}{
+  basicstyle=\ttfamily\footnotesize,
+  showstringspaces=false,
+  breaklines=true,
+  columns=fullflexible,
+  morecomment=[l]{\#},
+  morestring=[b]',
+  morestring=[b]",
+}
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  breakatwhitespace=false,
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false,
+}
+
+% --- Make line-breaking more forgiving (reduces overfull hboxes) ---
+\usepackage{microtype}
+\sloppy
+\emergencystretch=2em
+\setlength{\tabcolsep}{6pt}
+
+% --- Map common Unicode to TeX (so you can keep ≤ ≥ × ° – — … → etc.) ---
+\DeclareUnicodeCharacter{2264}{\ensuremath{\le}}    % ≤
+\DeclareUnicodeCharacter{2265}{\ensuremath{\ge}}    % ≥
+\DeclareUnicodeCharacter{00D7}{\ensuremath{\times}} % ×
+\DeclareUnicodeCharacter{00B0}{\textdegree}         % °
+\DeclareUnicodeCharacter{2013}{--}                  % –
+\DeclareUnicodeCharacter{2014}{---}                 % —
+\DeclareUnicodeCharacter{2026}{\ldots}              % …
+\DeclareUnicodeCharacter{00A0}{~}                   % nbsp
+\DeclareUnicodeCharacter{2192}{\ensuremath{\rightarrow}}     % →
+%\DeclareUnicodeCharacter{2192}{\ensuremath{\rightarrow}} % (alt)
+
+\title{Five-Tier System Architecture (Per-Tier Diagrams)}
+\author{}
+\date{}
+
+% Configure caption placement
+\captionsetup[table]{position=top}
+
+
+\begin{document}
+\maketitle
+
+
+% Your content starts here...
+
+\section{All Tiers — End-to-End Overview}
+
+In my architecture, I've designed a clean, all-tiers, end-to-end system that links five tiers together. Let me walk you through my design decisions and how they impact performance.
+
+\subsection{End-to-End Performance Levers \& Trade-offs}
+
+In my implementation, I've established a latency budget using a rule-of-thumb approach. Let \(H\) be mesh hops, \(t_h\) per-hop latency (ms), \(T_q\) Tier-2 queueing/bundle time (histogram \texttt{bundle\_latency\_seconds}), \(T_b\) orderer BatchTimeout (s), and \(T_v\) peer validation/commit time. Then:
+
+\[
+T_{e2e} \approx T_q + H \cdot t_h + T_b + T_v
+\]
+
+I've tuned these levers to keep \(T_{e2e}\) within my SLO targets (detailed in the next section). Here's my analysis of what each lever changes and how I've implemented them:
+
+\begin{table}[H]
+\centering
+\small
+\setlength{\tabcolsep}{5pt}
+\renewcommand{\arraystretch}{1.15}
+\caption{Performance levers I've implemented and their impacts}
+\begin{tabular}{
+  >{\raggedright\arraybackslash}p{0.16\textwidth}
+  >{\raggedright\arraybackslash}p{0.18\textwidth}
+  >{\raggedright\arraybackslash}p{0.19\textwidth}
+  >{\raggedright\arraybackslash}p{0.35\textwidth}
+  >{\raggedright\arraybackslash}p{0.12\textwidth}
+}
+\toprule
+\textbf{Lever} & \textbf{What I Tune} & \textbf{Affects} & \textbf{How I Measure} & \textbf{Where I Apply} \\
+\midrule
+Cadence & 30–120 min windows & Storage vs freshness &
+\texttt{bundles\_submitted\_total\{type\}}, ledger growth/day & Tier 2→4 \\
+Event coalesce / rate-limit & 60–120 s, ≤6/h & Burst control, backlog &
+\texttt{events\_rate\_limited\_total}, \texttt{store\_backlog\_files} & Tier 2 \\
+BatchTimeout & 2–5 s & Event commit delay, block size &
+\texttt{submit\_commit\_seconds} p95, block cuts/min & Tier 4 \\
+Orderers & 1 vs 3 & Fault tolerance, commit tails &
+\texttt{submit\_commit\_seconds} p99 under failure drills & Tier 4 \\
+Mesh hops & Node spacing, links & \(H \cdot t_h\) term, PDR &
+\texttt{per\_hop\_latency\_ms}, \texttt{mesh\_neighbors} & Tier 3 \\
+Bundle size & Window length, filters & Queue time \(T_q\), ledger/day &
+\texttt{bundle\_latency\_seconds}, on-chain bytes/day & Tier 2→4 \\
+CRT on leaf & Budget threshold + moduli set & Packet size, relay count/memory &
+payload bytes calc, success of Garner recombination & Tier 1/2 \\
+Nodes vs memory & Leaf node count vs RAM/device & Secondary node pressure, residue size & \texttt{memory\_available\_bytes}, latency p95 & Tier 1 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+Use performance metrics to balance sensor population against available memory.
+Let \(M\) be device RAM and \(N\) the expected number of leaf nodes that a
+secondary node must relay. The available memory per node is \(M/N\); this
+value determines how many residues can be carried without pushing queues or
+causing garbage collection pauses on the relays. The \texttt{select\_moduli} utility
+encodes this heuristic into three bands:
+
+\begin{itemize}
+\item <32 KiB → \([97,101]\) (two residues, ≈2 B/reading)
+\item 32–64 KiB → \([97,101,103]\) (three residues, ≈3 B/reading)
+\item >64 KiB → \([97,101,103,107]\) (four residues, ≈4 B/reading)
+\end{itemize}
+
+Example: with 20 sensors sending 1 reading/min and a secondary Pi with 512 KiB
+free memory, \(512 \text{ KiB} / 20 \approx 25 \text{ KiB}\) → choose \([97,101]\). Each extra modulus
+adds one byte per reading per hop, so exceeding the recommended band quickly
+multiplies buffer pressure and increases latency. Track \texttt{memory\_available\_bytes}
+alongside queue metrics such as \texttt{bundle\_latency\_seconds} to verify the chosen
+band maintains low delay.
+
+Keeping per-node memory within these bands enables secondary nodes to sustain
+low latency and avoid backpressure during bursts.
+
+\subsection{SLOs, Alerts \& Readiness Contracts}
+
+I've established these Service Level Objectives as targets to defend with data:
+
+\begin{itemize}
+\item \textbf{Submit→commit (p95):} ≤ 5 s at steady state; I show distributions for 2, 20, 100 Pis.
+\item \textbf{Periodic bundles:} Commit within window + 1×BatchTimeout (e.g., 60 min + 5 s).
+\item \textbf{Event bundles:} Commit within ≤ 2×BatchTimeout (e.g., ≤10 s).
+\item \textbf{Mesh health:} Per-hop latency p95 < 8 ms, min neighbors ≥ 2 per node.
+\item \textbf{Backlog:} \texttt{store\_backlog\_files} not increasing over 30 min windows.
+\item \textbf{Duplicates:} \texttt{duplicates\_total} rate < 1\% of \texttt{ingress\_packets\_total}.
+\end{itemize}
+
+I've implemented these Prometheus recording rules to monitor these SLOs:
+
+\begin{lstlisting}[language=yaml, basicstyle=\footnotesize\ttfamily]
+- record: fabric:submit_commit_seconds:p95
+  expr: histogram_quantile(0.95, sum by (le) (rate(submit_commit_seconds_bucket[5m])))
+- record: t2:bundle_latency_seconds:p95
+  expr: histogram_quantile(0.95, sum by (le) (rate(bundle_latency_seconds_bucket[5m])))
+- record: pipeline:duplicates_ratio
+  expr: rate(duplicates_total[5m]) / rate(ingress_packets_total[5m])
+- record: mesh:min_neighbors
+  expr: min(mesh_neighbors)
+- record: t2:backlog_trend_30m
+  expr: increase(store_backlog_files[30m])
+\end{lstlisting}
+
+I've configured these alert rules to notify me of issues:
+
+\begin{lstlisting}[language=yaml, basicstyle=\footnotesize\ttfamily]
+- alert: FabricSlowCommits
+  expr: fabric:submit_commit_seconds:p95 > 5
+  for: 10m
+  labels: {severity: page}
+  annotations: {summary: "p95 submit→commit > 5s"}
+
+- alert: PeriodicMissedWindow
+  expr: (time() - max_over_time(last_periodic_commit_ts[2h])) > (60*60 + 5)
+  for: 5m
+  labels: {severity: page}
+  annotations: {summary: "Periodic bundle missed window+timeout"}
+
+- alert: MeshDegraded
+  expr: mesh:min_neighbors < 2 or avg_over_time(per_hop_latency_ms[5m]) > 8
+  for: 15m
+  labels: {severity: warn}
+  annotations: {summary: "Mesh neighbors/latency out of SLO"}
+
+- alert: BacklogGrowing
+  expr: t2:backlog_trend_30m > 50
+  for: 30m
+  labels: {severity: warn}
+  annotations: {summary: "Store&Forward backlog growing"}
+\end{lstlisting}
+
+I've implemented these readiness contracts (wiring \texttt{/readyz} to real liveness):
+
+\begin{itemize}
+\item I indicate READY only if a new commit height was observed within the last 2×BatchTimeout or the last scheduled periodic window (whichever is tighter).
+\item I fail readiness if mesh route to the orderer is down (no neighbors or no WireGuard session), or if backlog exceeds a threshold for > 30 min.
+\item I keep \texttt{/healthz} simple (pipeline alive, no fatal loops), but \texttt{/readyz} depends on recent ledger progress to prevent false-ready states.
+\end{itemize}
+
+\subsection{How I Designed This System}
+
+Let me explain my design thinking behind this architecture:
+
+\begin{enumerate}
+\item \textbf{Tier 1 → Tier 2:} I designed each ESP32 to send a window summary with an \texttt{urgent} flag and optional CRT residues. Tier 2 verifies, de-duplicates, stages, bundles, and computes a \texttt{merkle\_root}.
+\item \textbf{Tier 2 → Tier 3 → Tier 4:} I implemented a Scheduler that submits periodic bundles (30–120 min) and event bundles immediately, traversing the mesh to the Fabric orderer and peers for validation and commit. My chaincode stores summaries and \texttt{merkle\_root} values.
+\item \textbf{Tier 5 (Observability):} I made sure every tier exposes \texttt{/metrics} scraped by Prometheus; Grafana visualizes, and Alertmanager routes alerts. I designed readiness to depend on recent commit activity.
+\item \textbf{Performance levers:} I carefully considered BatchTimeout, orderer count, bundle cadence, mesh hop count, and Tier-2 latency/backlog to highlight throughput and latency trade-offs.
+\end{enumerate}
+
+\section{Tier 1 — ESP32 \& Sensors (Standalone Diagram + Data Schemas + CRT Budget)}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\textwidth,height=0.7\textheight,keepaspectratio]{t1.png}
+\caption{Tier 1 architecture: ESP32 and sensors}
+\end{figure}
+\vspace{-0.5cm} % Reduce space after figure
+
+In my design, Tier 1 reads local sensors at a fixed interval (e.g., every few minutes), builds a compact windowed summary, and sends it to the nearest Raspberry Pi gateway. I made the leaf favor small packets with statistics and optional event flags to keep radio use and power low.
+
+For coverage planning, I determined that the number of leaf nodes depends on farm surface area and radio range; using CRT can increase the need for secondary/relay nodes (processing/memory trade-offs).
+
+Mathematically, I designed each sensor \(s\) to produce a time series of readings \(x_s(t)\). Over a sampling window \(W\) with \(|W|\) samples, the node derives:
+\[
+\text{avg}_s = \frac{1}{|W|} \sum_{t\in W} x_s(t),\qquad
+\text{min}_s = \min_{t\in W} x_s(t),\qquad
+\text{max}_s = \max_{t\in W} x_s(t),
+\]
+\[
+\text{std}_s = \sqrt{\frac{1}{|W|}\sum_{t\in W} (x_s(t)-\text{avg}_s)^2},\qquad
+\text{count}_s = |W|.
+\]
+The statistics for sensor \(s\) form the tuple \(S_s=(\text{min}_s,\text{avg}_s,\text{max}_s,\text{std}_s,\text{count}_s)\), which I encode in the outgoing payload.
+
+\subsection{Leaf → Pi Payload (with actual sensor data)}
+
+I designed the envelope with these components (IDs \& timing):
+
+\begin{itemize}
+\item device\_id (string/bytes): unique leaf identifier
+\item seq (uint32): monotonic packet sequence
+\item window\_id (uint32): sliding/rolling window identifier
+\item last\_ts (uint64): last sample timestamp (epoch ms)
+\end{itemize}
+
+For the sensor set (environmental \& system vitals), I included all that apply:
+
+\begin{itemize}
+\item temperature\_c (°C)
+\item soil\_moisture\_vwc (\% volumetric water content)
+\item humidity\_rh (\% relative humidity)
+\item soil\_ph (pH, unitless)
+\item light\_lux (lux)
+\item battery\_v (V battery voltage)
+\item rssi\_dbm (dBm, link quality during last uplink)
+\item water\_level\_cm (cm water level)
+\end{itemize}
+
+For each sensor in sensor\_set, I embed windowed statistics in stats:  
+\{min, avg, max, std, count\} (numeric, fixed-point or scaled int). This preserves trends but keeps packets small.
+
+For event \& control flags, I implemented:
+
+\begin{itemize}
+\item urgent (bool/bitfield): fast-path submit for threshold breaches (e.g., temp high, moisture low).
+\end{itemize}
+
+For optional CRT residues (size relief), I added:
+
+\begin{itemize}
+\item crt: \{ m[], r[] \}: residues r\_i = x mod m\_i for selected large numeric fields when the payload risks exceeding the byte budget; moduli m[] are pairwise coprime and their product covers the numeric range; the Pi recombines via Garner's algorithm.
+\end{itemize}
+
+For integrity, I implemented:
+
+\begin{itemize}
+\item sig (Ed25519 or HMAC) over the envelope + stats (protects integrity/identity using the device registry).
+\end{itemize}
+
+\subsubsection{Example JSON (illustrative)}
+
+\begin{lstlisting}[language=json, basicstyle=\footnotesize\ttfamily]
+{
+  "device_id": "leaf-13",
+  "seq": 4821,
+  "window_id": 109,
+  "last_ts": 1693212345678,
+  "sensor_set": ["temperature_c","soil_moisture_vwc","humidity_rh","soil_ph","light_lux","water_level_cm","battery_v","rssi_dbm"],
+  "stats": {
+    "temperature_c": {"min": 24.1, "avg": 25.7, "max": 27.8, "std": 0.6, "count": 36},
+    "soil_moisture_vwc": {"min": 23.0, "avg": 24.4, "max": 26.9, "std": 0.8, "count": 36},
+    "humidity_rh": {"min": 58.2, "avg": 61.0, "max": 63.4, "std": 1.1, "count": 36},
+    "soil_ph": {"min": 6.2, "avg": 6.3, "max": 6.4, "std": 0.05, "count": 36},
+    "light_lux": {"min": 1200, "avg": 2400, "max": 4000, "std": 500, "count": 36},
+    "water_level_cm": {"min": 42, "avg": 48, "max": 55, "std": 3.2, "count": 36},
+    "battery_v": {"min": 3.78, "avg": 3.81, "max": 3.84, "std": 0.02, "count": 36},
+    "rssi_dbm": {"min": -86, "avg": -78, "max": -72, "std": 3.1, "count": 6}
+  },
+  "urgent": false,
+  "sig": "<64B>"
+}
+\end{lstlisting}
+
+\subsection{Byte-Budget \& CRT (When/Why)}
+
+I defined a target payload budget (e.g., ≤ ~100B) and compute it from the actual fields above (IDs/timestamps + N sensors × 5 stats + signature + flags). If the computed size for a given window exceeds the budget, I enable \texttt{crt\{m[], r[]\}} for selected large numeric groups (e.e., multi-field stats), choosing moduli so that the product covers their range; Pi recombines to canonical values before bundling and Merkle hashing. This answers "How I established the budget to enable CRT" → by summing concrete field sizes and switching CRT only when the sum exceeds the set budget. This choice can influence secondary/relay node planning due to processing/memory trade-offs.
+
+Here's my representative calculation (assuming 7 sensors and 16-bit stats):
+
+\begin{table}[H]
+\centering
+\caption{Byte budget calculation for my payload design}
+\begin{tabular}{|l|r|}
+\hline
+Component & Bytes \\
+\hline
+device\_id + seq + window\_id + last\_ts & 20 \\
+flags & 1 \\
+stats (7 sensors × 5 stats × 2B) & 70 \\
+signature (HMAC-SHA256) & 32 \\
+\hline
+Total & 123 \\
+\hline
+\end{tabular}
+\end{table}
+
+Because the total exceeds my 100B target, I activate CRT for the bulkiest integers. Each such value \(x\) is encoded as residues \(r_i = x \bmod m_i\) under pairwise-coprime moduli \(m_i\). Sending two 1-byte residues instead of a 32-bit integer shrinks the payload while preserving deterministic reconstruction on the Pi.
+
+In my design, CRT is \textbf{optional}: if the calculated size remains under the budget, the node omits the \texttt{crt} field and transmits canonical integers directly. When the window threatens to overflow the limit (e.g., many sensors or high-precision counts), the node selects pairwise coprime moduli \(m_i\) (e.g., \(97,101,103\)) whose product covers the numeric range and sends residues \(r_i = x \bmod m_i\). The Pi reconstructs \(x\) using the Chinese Remainder Theorem—typically via Garner's algorithm—verifies that \(x < \prod m_i\), and restores the original integer before computing the Merkle hash. Thus CRT reduces wire size without changing the deterministic value hashed into the tree or seeding the blockchain.
+
+\subsection{Hand-off to Tier 2}
+
+I designed the leaf to transmit the compact window summary (and any urgent events) to the nearest Pi gateway, which verifies/deduplicates and stages by \texttt{window\_id} for bundling and Merkle-root computation downstream.
+
+For each payload \(P_i\) the gateway computes a cryptographic hash
+\[ h_i = H(P_i) \]
+using a function such as SHA-256, yielding the Merkle tree leaves. Hashes are paired and folded iteratively,
+\[ h_{i,j} = H(h_{2i} \Vert h_{2i+1}) \]
+until a single root \(R\) remains. The inaugural root \(R_0\) seeds the ledger by forming the first block \(B_0=(R_0, t_0)\), and each subsequent window contributes a new root \(R_k\) appended as block \(B_k\). This process both compacts Tier 1 data and begins the blockchain.
+
+\section{Tier 2 (Pi Ingress \& Bundler)}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth,height=0.8\textheight,keepaspectratio]{t2.png}
+\caption{Tier 2 architecture: Pi ingress and bundler}
+\end{figure}
+\vspace{-0.5cm} % Reduce space after figure
+
+In my architecture, Tier 2 is the gateway that receives leaf packets, verifies and de-duplicates them, stages per time window, and assembles bundles for downstream commit. I designed it to submit bundles on a schedule and immediately for events.
+
+\subsection{1) Ingress (verify → dedupe → stage)}
+
+\begin{itemize}
+\item \textbf{Packet verification \& identity:} I validate message structure and the device identity; verify HMAC/Ed25519 signatures using the device registry that maps \texttt{device\_id → key\_id}.
+\item \textbf{De-duplication:} I drop repeats (e.g., using \texttt{device\_id + seq/window\_id} as an idempotency key) and keep a counter for duplicates; only clean, unique records proceed to staging.
+\item \textbf{Window staging:} I organize valid readings by \texttt{window\_id} into queues on disk so that the Bundler can efficiently build a periodic \texttt{IntervalBundle} for that window.
+\end{itemize}
+
+For ops/metrics exposure, I made gateways expose \texttt{/healthz}, \texttt{/readyz}, and \texttt{/metrics} so Tier 5 can scrape packet counts/latency/system load from Tier 2.
+
+\subsection{2) Bundler (build → hash → forward)}
+
+I designed Tier 2 to produce two bundle types:
+
+\begin{itemize}
+\item \textbf{IntervalBundle} — periodic summaries for a time window  
+  \texttt{bundle\_id}, \texttt{window\_id}, \texttt{readings[]}, \texttt{created\_ts}, \texttt{count}, \texttt{merkle\_root}
+\item \textbf{EventBundle} — immediate submits for thresholded/urgent events  
+  \texttt{bundle\_id}, \texttt{events[\{device\_id, ts, type, before[], after[], thresholds\}]}, \texttt{created\_ts}, \texttt{merkle\_root}
+\end{itemize}
+
+For Merkle root (bundle proof), I hash each item (reading/event), build the tree, and record the Merkle root inside the bundle. Tier 4 (Fabric) stores summary + \texttt{merkle\_root}; later, any raw item can be proven with a Merkle path instead of storing all raw data on-chain.
+
+For cadence \& triggers, I made the scheduler submit periodic bundles every 30–120 min, and event bundles immediately; this choice directly impacts end-to-end latency vs. storage trade-offs that I've justified with measurements/plots.
+
+For failure handling (CRT edge cases), when upstream uses CRT at Tier 1, I recombine residues at the Pi via Garner's algorithm; if some item can't be reconstructed, I mark that record invalid (log reason) but continue others, and prefer canonical (recovered) values for Merkle hashing so proofs align with on-chain roots.
+
+\subsection{3) On-chain mapping (how Tier 2 output is stored/indexed)}
+
+\begin{itemize}
+\item \textbf{Key patterns:}
+  \begin{itemize}
+  \item \texttt{reading:device\_id:window\_id} → summary stats (+ proof hash/\texttt{merkle\_root})
+  \item \texttt{event:device\_id:ts} → event details  
+  \end{itemize}
+  My rationale: store summaries to keep the ledger compact; rely on Merkle proofs to recover/verify raw items when needed.
+\item \textbf{Handoff to Tier 4:} I made the Bundler act as the client that submits transactions to Fabric; ordering/commit latency and block timing are governed in Consensus \& Block Policy (Tier 4), which I've defined and justified (\texttt{BatchTimeout}, orderer count, latency bands).
+\end{itemize}
+
+\section{Tier 3 (Mesh/Link)}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\textwidth,height=0.7\textheight,keepaspectratio]{t33.png}
+\caption{Tier 3 architecture: Mesh network}
+\end{figure}
+\vspace{-0.5cm} % Reduce space after figure
+
+In my implementation:
+
+\begin{itemize}
+\item For topology \& radio planning, I use directional links ("WokFi" or equivalent) to increase SNR and extend range between Pis; I plan node spacing so the expected hop count keeps end-to-end delay within my cadence target. My mesh tolerates single-link failures without violating latency SLOs.
+\item For the protocol stack, radios run WPA2/3; BATMAN-adv provides Layer-2 meshing and path selection via ETX; WireGuard encrypts payloads end-to-end across bat0.
+  \begin{itemize}
+  \item For performance targets, I record measured per-hop latency (aim "few ms per hop"), packet delivery ratio, route-flap rate, and jitter under varying traffic. These metrics inform my QoS trade-offs for Hyperledger Fabric deployments.
+  \end{itemize}
+\item For metrics to export, I use mesh\_neighbors, mesh\_retries\_total, mesh\_rssi\_avg, per\_hop\_latency\_ms, and path\_change\_total (or equivalent) for Grafana.
+\item For failure modes, I show how the mesh re-routes when a link's ETX rises or RSSI falls; I log an alert if ETX stays above a threshold for N windows to force maintenance.
+\end{itemize}
+
+\section{Tier 4 (Hyperledger Fabric)}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth,height=0.8\textheight,keepaspectratio]{t4.png}
+\caption{Tier 4 architecture: Hyperledger Fabric blockchain}
+\end{figure}
+\vspace{-0.5cm} % Reduce space after figure
+
+\subsection{Blockchain \& Ledger Overview}
+
+In my Hyperledger Fabric implementation, peers keep two synchronized data structures: an immutable blockchain and a mutable world state. Each block contains a header with the \texttt{PreviousHash} and \texttt{DataHash}, an ordered list of transactions and associated metadata. Linking the \texttt{PreviousHash} values forms a tamper-evident chain. When a block commits, the peer appends it to the block store and applies each transaction's write-set to the state database (CouchDB in my deployment), allowing fast queries of current values while preserving the full audit trail.
+
+I designed transactions to progress through four phases:
+
+\begin{enumerate}
+\item \textbf{Endorsement:} The client invokes chaincode on endorsing peers and collects signatures over the produced read/write sets.
+\item \textbf{Ordering:} Endorsed transactions are sent to the ordering service for global sequencing.
+\item \textbf{Validation:} Peers verify endorsement policies and check for MVCC conflicts.
+\item \textbf{Commit:} Validated transactions are written to the block chain and world state atomically.
+\end{enumerate}
+
+\subsection{Consensus \& Block Policy}
+
+\begin{itemize}
+\item \textbf{Consensus:} I use Raft crash-fault tolerant protocol. Orderers elect a leader that appends transactions to a replicated log; followers persist entries and the block is final once a quorum (⌈n/2⌉) stores it, eliminating forks. My \textbf{sizing rule:} ≤10 Pis → \textbf{1 orderer}; ≥20 Pis → \textbf{3 orderers} (odd number, separate power domains) so the cluster survives one failure while keeping quorum.
+\item \textbf{Formation:} My scheduler submits \textbf{periodic bundles every 30–120 min}; \textbf{event bundles immediately}. Orderer cuts blocks by \textbf{BatchTimeout/size} (not instant). I keep \textbf{BatchTimeout small (2–5 s)} so events commit quickly while periodic cadence is dominated by windowing.
+\item \textbf{Batching knobs:} I start with \textbf{MaxMessageCount 10–50}, \textbf{PreferredMaxBytes ~1–2 MB}, \textbf{AbsoluteMaxBytes 10 MB} (tune per throughput/link quality). I present measurement plots to justify these choices.
+\item \textbf{Latency targets:} My \textbf{submit→commit} ≈ \textbf{1–2 s (2 Pis), 3–5 s (20 Pis), 10–15 s (100 Pis)}; I validate these with test runs.
+\item \textbf{Timing parameters:}
+  \begin{itemize}
+  \item \textbf{BatchTimeout:} 2–5 s upper bound before block cut; small values keep event latency low.
+  \item \textbf{TickInterval:} 500 ms base Raft clock.
+  \item \textbf{ElectionTick:} 10 ticks (≈5 s) for leader election; balances quick failover against false positives on a lossy mesh.
+  \item \textbf{HeartbeatTick:} 1 tick (500 ms) heartbeat from leader; detects failures within a second.
+  \item \textbf{SnapshotInterval:} 10 000 blocks (~7 days at 1-min windows); limits state transfer time during recovery.
+  \item \textbf{BlockRetention:} I retain last 100 blocks on orderers for fast restarts.
+  \end{itemize}
+\end{itemize}
+
+I carefully tuned these timers as it's critical: too aggressive values cause flapping in a rural mesh, while sluggish ones inflate commit latency. My selected values assume sub-second inter-Pi RTTs and periodic bundles every 30–120 minutes; I adjust if network conditions differ.
+
+\subsection{Block Formation \& Size Estimates}
+
+\begin{enumerate}
+\item \textbf{Leaf payload:} Each ESP32 summarizes \(S\) sensors with five statistics (min, avg, max, std, count). Assuming 32-bit floats:
+  \[
+  \text{sensor\_bytes} = 5 \times 4 = 20\text{ B},\qquad
+  \text{leaf\_bytes} = S \times 20 + 40
+  \]
+  The extra 40 B covers device/window IDs, flags and a signature. For my seven environmental sensors in Tier-1, \(\text{leaf\_bytes}≈200\) B.
+\item \textbf{Bundle payload:} A Pi gateway aggregates \(L\) leaf payloads and appends a 32 B Merkle root plus ~32 B of headers:
+  \[
+  \text{bundle\_bytes} = L \times \text{leaf\_bytes} + 64
+  \]
+\item \textbf{Block construction:} My scheduler submits one bundle per Pi every window interval \(W\) minutes. The orderer collects the \(N_{\text{pi}}\) bundles and cuts a block after \texttt{BatchTimeout} or size triggers:
+  \[
+  \text{block\_bytes} = 200 + N_{\text{pi}} \times \text{bundle\_bytes}
+  \]
+  A ~200 B overhead accounts for the block header and metadata.
+\item \textbf{Ledger growth:} Blocks arrive once per window, so my yearly ledger size is
+  \[
+  \text{ledger}_{\text{year}} = \text{block\_bytes} \times \frac{365\times1440}{W}
+  \]
+\end{enumerate}
+
+\textbf{Example from my implementation:} With \(S=8\) sensors per leaf, \(L=10\) leaves per Pi, \(N_{\text{pi}}=50\) gateways and \(W=60\) min:
+
+\begin{itemize}
+\item \(\text{bundle\_bytes} = 10 \times (8\times20 + 40) + 64 = 2,064\) B.
+\item \(\text{block\_bytes} = 200 + 50 \times 2,064 \approx 103,400\) B (≈101 KB).
+\item \(\text{ledger}_{\text{year}} \approx 103,400 \times \frac{365\times1440}{60} \approx 9.1\times10^8\) B (≈0.9 GB).
+\end{itemize}
+
+These formulas let me plug in different numbers of Pis or sensors to estimate block and ledger sizes.
+
+\subsection{Chaincode \& On-Chain Keys}
+
+\begin{itemize}
+\item \texttt{reading:device\_id:window\_id} → \texttt{\{stats, last\_ts, merkle\_root, writer\_msp\}}
+\item \texttt{event:device\_id:ts} → \texttt{\{type, before[], after[], thresholds, writer\_msp\}}
+\item I store summaries plus \textbf{merkle\_root} to keep ledger small; recover raw via Merkle proofs.
+\item I implement idempotency via \texttt{last\_seq:device\_id} check to safely handle retries.
+\end{itemize}
+
+\subsection{State DB \& Query Performance}
+
+\begin{itemize}
+\item I use \textbf{CouchDB} for state. I create JSON indexes for common queries:
+  \begin{lstlisting}[language=json, basicstyle=\footnotesize\ttfamily]
+  {"index":{"fields":["device_id","window_id"]},"name":"idx_device_window","type":"json"}
+  \end{lstlisting}
+  \begin{lstlisting}[language=json, basicstyle=\footnotesize\ttfamily]
+  {"index":{"fields":["device_id","ts"]},"name":"idx_device_ts","type":"json"}
+  \end{lstlisting}
+  These support fast lookups like "show window X for device Y" and "events for device Y since T".
+\end{itemize}
+
+\subsection{Security \& Access}
+
+\begin{itemize}
+\item \textbf{MSP \& ACLs:} I only allow the \textbf{Bundler client} identity to invoke \texttt{PutReading/PutEvent}. Readers get read-only. I rotate certs and enable TLS everywhere.
+\end{itemize}
+
+\subsection{Observability}
+
+\begin{itemize}
+\item I export peer/orderer metrics and graph \textbf{submit→commit} and \textbf{block-cut} distributions under different cadences to tune Hyperledger Fabric performance.
+\end{itemize}
+
+\section{Tier 5 (Observability \& Ops)}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\textwidth,height=0.7\textheight,keepaspectratio]{T5.png}
+\caption{Tier 5 architecture: Observability and operations}
+\end{figure}
+\vspace{-0.5cm} % Reduce space after figure
+
+\subsection{Endpoints and what they mean}
+
+\begin{itemize}
+\item \texttt{/healthz}: I return \textbf{OK only when} the Pi pipeline is processing (ingress→bundler→scheduler) \textbf{and} mesh links are up enough to reach the gateway—this keeps probes honest.
+\item \texttt{/readyz}: I return \textbf{OK when a recent Fabric commit} (submit→commit) has been observed within a bounded time window; this couples readiness to ledger liveness.
+\end{itemize}
+
+\subsection{Canonical metric names (I stick to Prometheus conventions)}
+
+\begin{itemize}
+\item \textbf{Counters} (suffix \texttt{\_total}): \texttt{ingress\_packets\_total}, \texttt{duplicates\_total}, \texttt{drops\_total}, \texttt{bundles\_submitted\_total\{type\}}, \texttt{events\_rate\_limited\_total}.
+\item \textbf{Histograms} (suffix \texttt{\_seconds}): \texttt{ingress\_latency\_seconds}, \texttt{bundle\_latency\_seconds}, \texttt{submit\_commit\_seconds}.
+\item \textbf{Gauges}: \texttt{mesh\_neighbors}, \texttt{mesh\_rssi\_avg}, \texttt{store\_backlog\_files}, \texttt{block\_height}.
+\end{itemize}
+This exposes health and metrics from gateways and services while tracking packet counts and latency.
+
+\subsection{PromQL I use (recording rules)}
+
+\begin{lstlisting}[language=yaml, basicstyle=\footnotesize\ttfamily]
+# 1) Duplicates rate (per minute)
+- record: pipeline:duplicates_per_min
+  expr: rate(duplicates_total[5m]) * 60
+
+# 2) Submit→commit p95 (Fabric end-to-end)
+- record: fabric:submit_commit_seconds:p95
+  expr: histogram_quantile(0.95, sum by (le) (rate(submit_commit_seconds_bucket[5m])))
+
+# 3) Bundle latency p95 (Tier-2)
+- record: t2:bundle_latency_seconds:p95
+  expr: histogram_quantile(0.95, sum by (le) (rate(bundle_latency_seconds_bucket[5m])))
+
+# 4) Mesh neighbor floor (minimum over Pis)
+- record: mesh:min_neighbors
+  expr: min(mesh_neighbors)
+
+# 5) Backlog size (files waiting to send)
+- record: t2:store_backlog_files
+  expr: max(store_backlog_files)
+\end{lstlisting}
+
+\subsection{Alert rules I implemented (examples)}
+
+\begin{lstlisting}[language=yaml, basicstyle=\footnotesize\ttfamily]
+groups:
+- name: orion-tier5-alerts
+  rules:
+  - alert: FabricSlowCommits
+    expr: fabric:submit_commit_seconds:p95 > 5
+    for: 10m
+    labels: {severity: page}
+    annotations:
+      summary: "Fabric p95 submit→commit > 5s"
+      runbook_url: "runbooks/fabric_slow_commits.md"
+
+  - alert: EventStorm
+    expr: rate(bundles_submitted_total{type="event"}[5m]) > 0.2  # >12/h
+    for: 10m
+    labels: {severity: warn}
+    annotations:
+      summary: "High event submit rate (possible storm)"
+
+  - alert: MeshDegraded
+    expr: mesh:min_neighbors < 2 or avg_over_time(per_hop_latency_ms[5m]) > 8
+    for: 15m
+    labels: {severity: warn}
+    annotations:
+      summary: "Mesh health degraded (neighbors/latency)"
+
+  - alert: BacklogGrowing
+    expr: increase(store_backlog_files[30m]) > 50
+    for: 30m
+    labels: {severity: warn}
+    annotations:
+      summary: "Store&Forward backlog growing"
+\end{lstlisting}
+
+\subsection{Dashboard structure I designed (fast to navigate)}
+
+\begin{enumerate}
+\item \textbf{Overview} (single pane): key health (\texttt{/healthz}, \texttt{/readyz}), \textbf{p95 submit→commit}, bundle throughput, event rate, backlog gauge, mesh neighbors min.
+\item \textbf{Tier-2 page}: ingress packet trend, duplicates/drop rates, \textbf{bundle latency} histogram, backlog, scheduler cadence.
+\item \textbf{Tier-3 page}: neighbors by node, \textbf{per-hop latency}, retries, RSSI; highlight path changes/flaps.
+\item \textbf{Tier-4 page}: \textbf{submit→commit percentiles}, block cuts per minute, peer/orderer health, chaincode invokes, state DB ops.
+\item \textbf{Explorer}: device/window drilldown; filter by \texttt{device\_id}, \texttt{window\_id}, or event type.
+\end{enumerate}
+These steps reflect my Tier 5 intent: health checks and dashboards that show system status and recent activity.
+
+\subsection{SLOs I established}
+
+\begin{itemize}
+\item \textbf{Submit→commit (p95):} ≤ 5 s under normal load; I show distributions at my scales (2, 20, 100 Pis).
+\item \textbf{Bundle schedule adherence:} Periodic 30–120 min windows commit within \textbf{window + 1×BatchTimeout}; events commit in \textbf{< 2×BatchTimeout}; I defend these with plots.
+\item \textbf{Mesh health:} ≥ 2 neighbors/node; \textbf{per-hop latency} < 8 ms on p95.
+\end{itemize}
+
+\subsection{Ops notes (how I keep it running)}
+
+\begin{itemize}
+\item \textbf{Labels \& cardinality:} I keep \texttt{device\_id} as a \textbf{label only on low-cardinality series} (e.g., *last seen* gauges); I prefer window/device as \textbf{log fields} (Loki) or query keys in Fabric, not high-cardinality Prom metrics.
+\item \textbf{Histogram buckets:} For \texttt{submit\_commit\_seconds}/\texttt{bundle\_latency\_seconds}, I pick buckets like \texttt{[0.5, 1, 2, 3, 5, 8, 13]}.
+\item \textbf{Runbooks:} I link each alert to a one-page fix guide (mesh degraded, backlog growing, Fabric slow, event storm).
+\item \textbf{Readiness:} I wire \texttt{/readyz} to \textbf{observed block height advancing} to avoid false-ready states.
+\end{itemize}
+
+\section{Data Schemas and Leaf Sensor Data}
+
+In this section, I summarize the canonical data schemas I use from the sensors up through observability and describe the raw measurements I collect across the leaf field.
+
+\subsection{Tier 1 — Sensor Window Schema}
+Each ESP32 leaf in my design records a vector of readings
+\[
+x(t) = \{ T(t), M(t), H(t), pH(t), L(t), V(t), R(t) \}
+\]
+for temperature T, soil moisture M, relative humidity H, soil pH, light intensity L, battery voltage V and RSSI R. Over a sampling window W the node outputs:
+
+\[
+\text{avg}_s = (1/|W|) \Sigma_{t\in W} x_s(t)
+\]
+\[
+\text{min}_s = \min_{t\in W} x_s(t)
+\]
+\[
+\text{max}_s = \max_{t\in W} x_s(t)
+\]
+\[
+\text{std}_s = \sqrt{(1/|W|) \Sigma_{t\in W} (x_s(t) - \text{avg}_s)^2}
+\]
+\[
+\text{count}_s = |W|
+\]
+
+along with timestamp \(\tau_W\), signature and optional CRT residue pairs \((m_i, r_i)\).
+
+\subsubsection{Field semantics and units}
+
+\begin{table}[H]
+\centering
+\caption{Field semantics and units in my sensor schema}
+\begin{tabular}{|l|l|l|l|}
+\hline
+Symbol & Measurement & Units & Notes \\
+\hline
+T & Temperature & °C & -40…85 typical for ESP32 sensor \\
+M & Soil moisture & \% & 0–100 volumetric water content \\
+H & Relative humidity & \% & 0–100 ambient air humidity \\
+pH & Soil acidity & pH & 3–10 range across crops \\
+L & Light intensity & lux & 0–65535 from photometric sensor \\
+V & Battery voltage & V & 0–6 range depending on cell type \\
+R & RSSI & dBm & -120…0 link budget \\
+\hline
+\end{tabular}
+\end{table}
+
+Each window is emitted as JSON in my implementation:
+
+\begin{lstlisting}[language=json, basicstyle=\footnotesize\ttfamily]
+{
+  "device_id": "leaf-42",
+  "window_id": 123,
+  "timestamp": "2024-05-11T10:00:00Z",
+  "stats": {
+    "T": {"avg": 21.7, "min": 18.3, "max": 24.1, "std": 1.2, "count": 120},
+    "M": {"avg": 43.1, "min": 41.9, "max": 45.0, "std": 0.6, "count": 120}
+  },
+  "signature": "<ecdsa>"
+}
+\end{lstlisting}
+
+This canonical schema fixes field names, units and numeric ranges so downstream tiers can validate data without out-of-band agreements.
+
+\subsubsection{Byte layout and CRT activation}
+
+\begin{table}[H]
+\centering
+\caption{Byte layout in my sensor payload design}
+\begin{tabular}{|l|r|l|}
+\hline
+Field & Bytes & Notes \\
+\hline
+device\_id + window\_id + seq + last\_ts & 20 & identifiers and timing \\
+flags & 1 & bitfield for QoS / alerting \\
+stats (7 sensors × 5 stats × 2 B) & 70 & 16-bit min/avg/max/std/count per sensor \\
+signature (HMAC-SHA256) & 32 & message authentication \\
+\hline
+Total (no CRT) & 123 & exceeds 100 B target budget \\
+\hline
+\end{tabular}
+\end{table}
+
+When the summed size crosses my 100 B budget, the node appends a \texttt{crt} object encoding large integers as residues:
+
+\begin{lstlisting}[language=json, basicstyle=\footnotesize\ttfamily]
+{
+  "device_id": "leaf-42",
+  "window_id": 123,
+  "timestamp": "2024-05-11T10:00:00Z",
+  "stats": { /* ... */ },
+  "crt": { "m": [97,101,103], "r": [43,52,60] },
+  "signature": "<ecdsa>"
+}
+\end{lstlisting}
+
+Each modulus/residue pair adds two bytes; choosing pairwise-coprime moduli whose product spans the original value lets the Pi reconstruct canonical integers via the Chinese Remainder Theorem before bundling and Merkle hashing.
+
+\subsection{Tier 2 — Bundle Schema}
+In my design, the gateway aggregates window summaries into an IntervalBundle containing \(\{S_j\}_{j=1\ldots n}\). A Merkle tree \(h = \text{hash}(\cdot)\) built over the summaries yields:
+
+\[
+\text{merkle\_root} = h( h(S_1) || \ldots || h(S_n) )
+\]
+
+Each bundle carries window\_id, device\_id, merkle\_root, signature and any CRT residues for verification.
+
+\subsection{Tier 3 — Mesh Frame Schema}
+Bundles traverse the mesh unchanged in my implementation. Per hop \(i\) the latency is:
+
+\[
+\ell_i = d_i / v_i
+\]
+
+so end-to-end delay becomes \(\Sigma_i \ell_i\). Packet loss probability after \(k\) hops is:
+
+\[
+1 - \Pi_{i=1}^k (1 - p_i)
+\]
+
+\subsection{Tier 4 — Ledger Schema}
+In my chaincode, I store keys of the form:
+
+\[
+\text{reading:device\_id:window\_id}
+\]
+
+mapping to records {summary, merkle\_root, writer\_msp}. Blocks link by hash with:
+
+\[
+\text{DataHash}_n = h(\text{BlockData}_n), \quad \text{PrevHash}_n = h(\text{Block}_{n-1})
+\]
+
+These hashes produce an append-only chain. Alongside the block log, each peer maintains a world-state database (CouchDB) holding the latest value for every key. Committing a block appends it to the chain and atomically applies its write-set to the world state, ensuring efficient queries and a complete audit trail.
+
+\subsection{Tier 5 — Observability Schema}
+In my metrics endpoints, I expose counters \(c(t)\), gauges \(g(t)\) and histogram buckets \(H(t)\). Rates are derived via:
+
+\[
+\text{rate}(c) = (c(t_2) - c(t_1)) / (t_2 - t_1)
+\]
+
+\subsection{Actual sensor capture across the field}
+In my leaf field, I aggregate each node vector into a field matrix:
+
+\[
+X_{\text{field}} = [x_1, x_2, \ldots, x_m]
+\]
+
+allowing spatial statistics such as mean temperature \(\bar{T} = (1/m) \Sigma_{j=1}^m T_j\) or moisture variance. These ground-truth measurements calibrate agronomic models and drive automation decisions.
+
+\subsection{Sensor capture to blockchain ledger}
+
+\begin{enumerate}
+\item \textbf{Leaf sensing:} Each leaf computes the statistic tuple
+   \(S_s = (\text{min}_s,\text{avg}_s,\text{max}_s,\text{std}_s,\text{count}_s)\)
+   and signs the payload \(P = \text{Enc}(S_s,\text{ids},\tau_W)\).
+\item \textbf{Gateway bundling:} The Pi gateway verifies the signature, reconstitutes any CRT fields, and forms a bundle
+   \(B = \{P_1,\ldots,P_n, \text{merkle\_root}\}\) with
+   \(\text{merkle\_root} = H(H(P_1) \Vert \cdots \Vert H(P_n))\).
+\item \textbf{Fabric submission:} Tier-3 transport delivers the bundle to Fabric where a transaction
+   \(T = \text{PutReading}(\text{device\_id},\text{window\_id},S_s,\text{merkle\_root})\)
+   is endorsed by peers and forwarded to the ordering service.
+\item \textbf{Block formation:} The orderer batches transactions and produces a block
+   \(B_k = (\text{PrevHash}_{k-1},\text{DataHash}_k,\text{txs})\)
+   where \(\text{DataHash}_k = H(T_1 \Vert \cdots \Vert T_m)\).
+\item \textbf{Ledger commit:} Peers validate \(极狐\), update state with
+   \texttt{reading:device\_id:window\_id → \{summary, merkle\_root, writer\_msp\}},
+   and append \(B_k\) to the immutable ledger linking by
+   \(\text{PrevHash}_{k-1} = H(B_{k-1})\).
+\end{enumerate}
+
+\section{Node Scheme without CRT}
+
+When sensor payloads stay within the 100 B budget, nodes transmit summaries directly without Chinese Remainder Theorem (CRT) residues. The JSON payload moves through Tier 2's Ingress → Bundler → Scheduler, crosses the mesh (Tier 3), and is finally ordered and committed in Tier 4.
+
+
+ \begin{center}
+ \includegraphics[width=0.8\textwidth]{deepseek_mermaid_20250824_d2a8dc.png}
+ \end{center}
+
+\section{Node Scheme with CRT}
+
+If the byte count exceeds the budget, the node encodes large integers as residue/modulus pairs. Tier 2's Ingress verifies the signature and uses Garner reconstruction to recover canonical integers before bundling and scheduling.
+
+
+ \begin{center}
+ \includegraphics[width=0.8\textwidth]{Screenshot-398.png}
+ \end{center}
+
+\end{document}

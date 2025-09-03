@@ -1,0 +1,492 @@
+\documentclass[12pt]{article}
+
+% --- Layout & Fonts ---
+\usepackage[margin=1in]{geometry}
+\usepackage{times}
+
+% --- Wrapping code-like text and nicer tables ---
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{url} % for \nolinkurl (breaks at _ / . etc.)
+
+% Breakable monospace macro
+\newcommand{\code}[1]{\texttt{\nolinkurl{#1}}}
+
+% Ragged p-columns
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+
+% Tighter, clearer table spacing
+\setlength{\tabcolsep}{5pt}
+\renewcommand{\arraystretch}{1.12}
+
+% Compact itemize defaults (adjust if you prefer)
+\setlist[itemize]{leftmargin=*, itemsep=2pt, topsep=2pt}
+
+
+% --- Math & Symbols ---
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+% --- Graphics & Floats ---
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+
+% --- Wrapping code-like text and nicer tables ---
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{url} % for \nolinkurl (breaks at _ / . etc.)
+
+% Breakable monospace macro
+\newcommand{\code}[1]{\texttt{\nolinkurl{#1}}}
+
+% Ragged p-columns
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+
+% Tighter, clearer table spacing
+\setlength{\tabcolsep}{5pt}
+\renewcommand{\arraystretch}{1.12}
+
+% Compact itemize defaults (adjust if you prefer)
+\setlist[itemize]{leftmargin=*, itemsep=2pt, topsep=2pt}
+
+
+% --- Tables & Lists ---
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{longtable}
+
+% --- Links & Glossary ---
+\usepackage{hyperref}
+\usepackage{glossaries}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,
+    urlcolor=cyan,
+    pdftitle={Evaluation Metrics for IoT-Blockchain System (ESP32 → Pi → Mesh → Hyperledger Fabric)},
+}
+
+% --- Code Listings ---
+\usepackage{xcolor}
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  rulecolor=\color{black!20},
+  numbers=left,
+  numberstyle=\tiny,
+  xleftmargin=2em,
+  framexleftmargin=1.5em,
+  keywordstyle=\color{blue!60!black}\bfseries,
+  commentstyle=\color{green!40!black},
+  stringstyle=\color{red!60!black}
+}
+
+% --- Glossary entries ---
+\makeglossaries
+\newglossaryentry{CRT}{
+    name=CRT,
+    description={Chinese Remainder Theorem used to compact large integers into residues; recombined via Garner on the gateway (Pi)}
+}
+\newglossaryentry{Coalesce window}{
+    name=Coalesce window,
+    description={Short interval (60-120 s) during which multiple event payloads merge into one bundle}
+}
+\newglossaryentry{ETX}{
+    name=ETX,
+    description={Expected Transmission Count; mesh quality indicator (lower is better)}
+}
+\newglossaryentry{STORE_DIR}{
+    name=STORE\_DIR,
+    description={On-disk queue for store-and-forward when Fabric or mesh is impaired}
+}
+\newglossaryentry{submit_to_commit}{
+    name=submit\_to\_commit,
+    description={Time between bundle submission and commit event observed by a peer}
+}
+\newglossaryentry{BATMAN-adv}{
+    name=BATMAN-adv,
+    description={Better Approach To Mobile Adhoc Networking - Advanced, a mesh networking protocol}
+}
+\newglossaryentry{Merkle root}{
+    name=Merkle root,
+    description={Cryptographic hash that summarizes all transactions in a block}
+}
+
+% --- Title ---
+\title{Evaluation: Energy \& Communications Metrics\\
+(ESP32 + Raspberry Pi + Mesh + Hyperledger Fabric)}
+
+
+\begin{document}
+\maketitle
+
+\section{abstract}
+This document presents a comprehensive evaluation framework for an IoT-Blockchain system architecture combining ESP32 nodes, Raspberry Pi gateways, mesh networking, and Hyperledger Fabric. The framework addresses performance metrics, energy consumption, latency analysis, and system validation procedures. The system supports both event-driven (burst, coalesced) and periodic (cadenced bundles) data paths, with formalized metrics, capacity planning, and validation strategies to maintain predictability under real-world constraints.
+
+
+
+
+% =========================
+\section{System Overview}
+\label{sec:overview}
+
+Edge nodes (ESP32) sample sensors and transmit compact payloads to Raspberry Pi gateways. Each gateway validates signatures, deduplicates payloads, and aggregates readings into bundles. When the mesh or Fabric becomes unavailable, the gateway falls back to \gls{STORE_DIR} for store-and-forward. Verified summaries are submitted to a Hyperledger Fabric network where chaincode persists compact records (e.g., window statistics, CRT residues). Raw samples remain off-chain and are anchored with \gls{Merkle root} hashes.
+
+The architecture employs a five-tier design:
+\begin{enumerate}
+    \item \textbf{Sensing Layer}: ESP32 devices with various environmental sensors
+    \item \textbf{Ingestion Layer}: Raspberry Pi gateways for data collection and preprocessing
+    \item \textbf{Networking Layer}: \gls{BATMAN-adv} mesh network for resilient communication
+    \item \textbf{Blockchain Layer}: Hyperledger Fabric for immutable data storage
+    \item \textbf{Observability Layer}: Monitoring and alerting infrastructure
+\end{enumerate}
+
+% =========================
+\section{Metrics Topology}
+\label{sec:metrics}
+
+Metrics flow from edge to ledger with clear ownership per component. The monitoring infrastructure follows a hierarchical topology from edge devices to the blockchain layer, with specific metrics collected at each stage:
+
+\begin{itemize}
+    \item \textbf{ESP32 (Leaf)}: Device status, sensor readings, transmission counters, battery voltage, RSSI values
+    \item \textbf{Ingress (Pi)}: \code{ingress_packets_total}, \code{duplicates_total}, \code{drops_total}, \code{ingress_latency_seconds}
+    \item \textbf{Bundler/Scheduler}: \code{bundles_submitted_total}, \code{bundle_latency_seconds}, \code{events_rate_limited_total}, \code{store_backlog_files}
+    \item \textbf{Mesh/Link}: \code{mesh_neighbors}, \code{mesh_retries_total}, \code{mesh_etx_avg}, \code{mesh_rssi_avg}
+    \item \textbf{Gateway Service}: \code{gateway_requests_total}, \code{gateway_commit_latency_seconds} (histogram), \code{gateway_backlog_depth}
+    \item \textbf{Fabric}: \code{submit_commit_seconds}, \code{tx_retry_total}, \code{endorsement_failures_total}, \code{block_bytes_total}
+    \item \textbf{Observability}: \code{exporter_up}, \code{alert_events_total}, \code{scrape_duration_seconds}
+\end{itemize}
+
+\paragraph{Code--Metrics Traceability.}
+\begin{longtable}{@{}L{0.36\linewidth}L{0.22\linewidth}L{0.38\linewidth}@{}}
+\toprule
+\textbf{Metric} & \textbf{Type} & \textbf{Component / Module} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Metric} & \textbf{Type} & \textbf{Component / Module} \\
+\midrule
+\endhead
+\code{ingress_packets_total} & Counter & Gateway Ingress / Orchestrator \\
+\code{duplicates_total} & Counter & Gateway Ingress / Orchestrator \\
+\code{drops_total} & Counter & Gateway Ingress / Orchestrator \\
+\code{ingress_latency_seconds} & Histogram & Gateway Ingress / Orchestrator \\
+\code{bundles_submitted_total} & Counter & Bundler / Scheduler \\
+\code{bundle_latency_seconds} & Histogram & Bundler / Scheduler \\
+\code{events_rate_limited_total} & Counter & Bundler / Rate Limiter \\
+\code{store_backlog_files} & Gauge & Store-and-Forward Manager \\
+\code{mesh_neighbors} & Gauge & Mesh Monitor \\
+\code{mesh_retries_total} & Counter & Mesh Monitor \\
+\code{mesh_etx_avg} & Gauge & Mesh Monitor \\
+\code{mesh_rssi_avg} & Gauge & Mesh Monitor \\
+\code{gateway_requests_total} & Counter & Flask Gateway API \\
+\code{gateway_commit_latency_seconds} & Histogram & Flask Gateway API \\
+\code{gateway_backlog_depth} & Gauge & Flask Gateway API \\
+\code{submit_commit_seconds} & Histogram & Fabric Client SDK \\
+\code{tx_retry_total} & Counter & Fabric Client SDK \\
+\code{endorsement_failures_total} & Counter & Fabric Client SDK \\
+\code{block_bytes_total} & Counter & Fabric Block Observer \\
+\code{exporter_up} & Gauge & Prometheus Exporters \\
+\code{alert_events_total} & Counter & Alertmanager \\
+\code{scrape_duration_seconds} & Histogram & Prometheus Server \\
+\bottomrule
+\caption{Prometheus metrics and their respective components for auditability.}
+\end{longtable}
+
+% =========================
+\section{Latency Accounting}
+\label{sec:latency}
+
+The end-to-end latency is composed of multiple additive components:
+
+\begin{equation}
+L_{\text{total}} = L_{\text{read}} + L_{\text{wifi}} + L_{\text{ingress}} + L_{\text{bundle\_wait}} + L_{\text{sched}} + L_{\text{mesh}} + L_{\text{submit\_to\_commit}}
+\end{equation}
+
+Where:
+\begin{itemize}
+    \item $L_{\text{read}}$: Sensor sampling and data encoding time on ESP32 (10-50 ms)
+    \item $L_{\text{wifi}}$: Wireless transmission delay to gateway (10-50 ms)
+    \item $L_{\text{ingress}}$: Parsing, verification, deduplication, and \gls{CRT} reconstruction on Pi (5-20 ms)
+    \item $L_{\text{bundle\_wait}}$: \gls{Coalesce window} for events (60-120 s); periodic cadence (30-120 min)
+    \item $L_{\text{sched}}$: Queuing and backoff time before submission (0-500 ms)
+    \item $L_{\text{mesh}}$: Multi-hop forwarding delay in \gls{BATMAN-adv} mesh (2-5 ms per hop)
+    \item $L_{\text{submit\_to\_commit}}$: \gls{submit_to_commit} confirmation time on Fabric
+\end{itemize}
+
+\paragraph{Performance Targets.} In small clusters (2 gateways), target \texttt{submit\_to\_commit} latency of 1-2 s; at 20 gateways, 3-5 s; and at 100 gateways, 10-15 s, assuming block sizes of 100-200 kB and healthy endorsement policies.
+
+% =========================
+\section{Energy Budgets}
+\label{sec:energy}
+
+\subsection{ESP32 Leaf Node}
+
+The energy model for ESP32-based leaf nodes incorporates multiple operational states:
+
+\subsubsection{Electrical Parameters}
+\begin{itemize}
+    \item Supply Voltage: 3.3 V
+    \item Deep Sleep Current: 10 $\mu$A
+    \item Light Sleep Current: 2-10 mA (when enabled between samples)
+    \item Active CPU Current: 40-80 mA for 50-150 ms per sensor set
+    \item Wi-Fi TX Current: 160-240 mA for 80-200 ms per transmission
+    \item Sensor Currents:
+    \begin{itemize}
+        \item DHT22: 1-1.5 mA for 2 ms conversion
+        \item Light sensor: 0.1-1 mA during read
+        \item Soil moisture: 5-30 mA (gated via MOSFET)
+        \item pH sensor: 5-10 mA during read
+        \item Ultrasonic: 2-10 mA during ping
+    \end{itemize}
+\end{itemize}
+
+\subsubsection{Energy Calculation Formula}
+The daily energy consumption is calculated as:
+
+\begin{equation}
+E_{\text{day}} (\text{Wh}) = \frac{\left( \sum_i (I_i (\text{mA}) \times t_i (\text{s}) ) \times V \right) / 1000}{3600}
+\end{equation}
+
+Where $i$ represents different operational states (sleep, sampling, transmission).
+
+\subsubsection{Example Scenario}
+For a configuration with:
+\begin{itemize}
+    \item Sampling interval: 120 s (720 samples/day)
+    \item Uplink interval: 900 s (96 transmissions/day)
+    \item Active sampling: 120 ms at 60 mA effective current
+    \item Transmission: 200 ms at 200 mA
+    \item CPU active: 50 ms at 80 mA
+    \item Deep sleep otherwise: 0.01 mA
+\end{itemize}
+
+The calculated daily energy consumption is approximately 9.4 mWh.
+
+\subsection{Raspberry Pi Gateway}
+
+The Pi gateway energy model accounts for multiple operational modes:
+
+\subsubsection{Power States}
+\begin{itemize}
+    \item Idle baseline: 2.5 W (Pi 4 with OS services)
+    \item Mesh/Wi-Fi active: +1.0 W while forwarding packets
+    \item Block processing bursts: +1.5 W during bundling and submission
+    \item Logging/monitoring: +0.5 W if verbose debug enabled
+\end{itemize}
+
+\subsubsection{Energy Calculation}
+Daily energy consumption is calculated as:
+
+\begin{equation}
+E_{\text{pi\_day}} (\text{Wh}) = \frac{\sum_j (P_j (\text{W}) \times t_j (\text{s}))}{3600}
+\end{equation}
+
+\subsubsection{Example Scenario}
+For a typical day with:
+\begin{itemize}
+    \item Mesh active for 6 hours (21600 s)
+    \item 96 commits at 5 s each (480 s)
+    \item Logging active for 1 hour (3600 s)
+    \item Idle for remaining time
+\end{itemize}
+
+The calculated daily energy consumption is approximately 70 Wh.
+
+% =========================
+\section{Communications KPIs}
+\label{sec:kpis}
+
+Key performance indicators for network health assessment:
+
+\begin{align*}
+\text{Drop Rate} &= \frac{\text{drops\_total}}{\text{ingress\_packets\_total}} \\
+\text{Duplicate Rate} &= \frac{\text{duplicates\_total}}{\text{ingress\_packets\_total}} \\
+\text{Retry Rate} &= \frac{\text{mesh\_retries\_total}}{\text{bundles\_submitted\_total}} \\
+\text{Success Rate} &= 1 - \text{Drop Rate} - \text{Duplicate Rate}
+\end{align*}
+
+Alert thresholds are set at 1\% for drop/duplicate rates and 5\% for retry rates, evaluated over 24-hour windows with a 5-minute duration to avoid flapping.
+
+% =========================
+\section{Ledger Representation and Chaincode}
+\label{sec:chaincode}
+
+On-chain records are compact representations of sensor data:
+
+\begin{itemize}
+    \item \textbf{Sensor window summaries}: Device identifiers, window timestamps, statistical aggregates (min, mean, max, count, variance), and \gls{Merkle root} of off-chain samples
+    \item \textbf{Compact agricultural transactions}: Reduced identifiers (16-bit SensorID), 32-bit timestamps, 2-3 \gls{CRT} residues for data compaction, and fixed-length signatures
+    \item \textbf{Anchoring records}: Periodic Merkle roots that cryptographically commit to off-chain data stores
+\end{itemize}
+
+Chaincode operations include:
+\begin{itemize}
+    \item Signature verification before state updates
+    \item Statistical aggregation validation
+    \item Merkle proof verification for off-chain data access
+    \param{CRT} residue recombination for data recovery
+\end{itemize}
+
+% =========================
+\section{Capacity Planning}
+\label{sec:capacity}
+
+System scaling parameters and formulas:
+
+\begin{align}
+T_{\text{mesh\_day}} &= B_{\text{cadence}} \times S_{\text{bundle}} \\
+G_{\text{ledger\_day}} &= N_{\text{pi}} \times B_{\text{cadence}} \times \text{avg\_block\_bytes}
+\end{align}
+
+Where:
+\begin{itemize}
+    \item $N_{\text{pi}}$: Number of gateway peers
+    \item $R$: Readings per leaf per day (typically 96 at 15-minute intervals)
+    \item $S_{\text{payload}}$: Bytes per leaf summary (approximately 100 B)
+    \item $S_{\text{bundle}}$: Bundle size including overhead (50-100 kB)
+    \item $B_{\text{cadence}}$: Bundles per day per gateway (24h / window minutes)
+\end{itemize}
+
+Target average block size of 100-200 kB with orderer \texttt{PreferredMaxBytes} near 1 MB to keep commit times predictable. Peer CPU utilization should remain well below saturation, with summary processing maintaining low utilization.
+
+% =========================
+\section{Data Retention and Anchoring}
+\label{sec:retention}
+
+\begin{itemize}
+    \item \textbf{On-chain}: Summary data and Merkle roots only
+    \item \textbf{Off-chain}: Raw samples in \gls{STORE_DIR} with Merkle root anchoring
+    \item \textbf{Retention policy}:
+    \begin{itemize}
+        \item Raw samples: 30-90 days (prune oldest when disk watermark exceeds 70\%)
+        \item Summarized stats: Indefinite retention on blockchain
+    \end{itemize}
+    \item \textbf{Block sizing}: Target average block size of 100-200 kB for predictable commit times
+    \item \textbf{Compaction strategies}: Enable CRT compaction, increase window minutes, or shard channels per field station if block sizes trend upward
+\end{itemize}
+
+% =========================
+\section{Validation Plan}
+\label{sec:validation}
+
+A comprehensive validation strategy includes:
+
+\begin{enumerate}
+    \item \textbf{Leaf bench test}: Fixed intervals ($sample\_period\_sec=60$, $uplink\_period\_sec=900$) with detailed energy measurements using inline current meters
+    \item \textbf{Gateway ingest test}: Replay 1k synthetic payloads at 1-5 Hz; verify deduplication rate = 0, \texttt{ingress\_latency\_seconds} p50 < 10 ms, p99 < 50 ms
+    \item \textbf{Event path test}: Trigger 3 distinct events within 90 s; expect exactly 1 EventBundle after coalesce; \texttt{submit\_to\_commit} < 6 s
+    \item \textbf{Periodic path soak test}: Run for 6 hours at 30-minute cadence; expect 12 IntervalBundles, 12 blocks, no backlog, stable \texttt{block\_bytes\_total}
+    \item \textbf{Mesh impairment test}: Drop one WokFi link (using attenuator or antenna rotation) for 5 minutes; expect reroute within 10-30 s, ETX spike, increased but acceptable \texttt{submit\_to\_commit}
+    \item \textbf{Power profiling}: Measure Pi wall power with and without mesh + Fabric to isolate network and consensus cost; log average and peak watts; convert to daily Wh using $P \times t / 3600$
+    \item \textbf{Communication reliability test}: Sustain 1 Hz traffic for 10 minutes while varying RSSI with attenuator; observe \texttt{drops\_total}, \texttt{duplicates\_total}, and \texttt{mesh\_retries\_total}; expect drop and duplicate rates below 1\% and retry rate under 5\% for healthy links
+\end{enumerate}
+
+% =========================
+\section{Troubleshooting Workflow}
+\label{sec:troubleshooting}
+
+A systematic approach to issue resolution:
+
+\begin{enumerate}
+    \item \textbf{Symptom identification}: Detect anomalies in dashboards/alerts (delayed commits, missing data)
+    \item \textbf{Metric-based classification}:
+    \begin{itemize}
+        \item \texttt{store\_backlog\_files > 0}: Fabric unreachable or slow (check orderer reachability, Raft health, disk I/O)
+        \item \texttt{mesh\_neighbors == 0}: Mesh isolation (check WokFi alignment, RSSI, ETX; verify WireGuard connectivity)
+        \item High \texttt{submit\_commit\_seconds}: Consensus or endorsement slow (reduce load; check CouchDB indexes; peer logs)
+        \item Rising \texttt{duplicates\_total}: Ingress replay or flapping leaf (check sequence monotonicity on leaf; adjust deduplication window)
+        \item High \texttt{block\_bytes\_total}: Block too big (reduce event tails; enable CRT compaction; increase interval minutes)
+    \end{itemize}
+    \item \textbf{Targeted remediation}: Apply specific fixes based on issue classification
+    \item \textbf{Resolution verification}: Confirm metric normalization and system recovery
+\end{enumerate}
+
+% =========================
+\section{Glossary}
+\label{sec:glossary}
+\printglossaries
+
+% =========================
+% Appendices
+\clearpage
+\appendix
+
+\section{Appendix A: Metrics Topology Diagram}
+\label{app:topology}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{IMG_1838(1).png}
+    \caption{Metrics collection path from ESP32 to monitoring stack}
+    \label{fig:metrics-topology}
+\end{figure}
+The metrics topology diagram illustrates the hierarchical structure of the monitoring system, showing the flow of metrics from ESP32 devices through various processing stages to the observability endpoint.
+
+Key components:
+\begin{itemize}
+    \item ESP32 sensor nodes with device-level metrics
+    \item Pi ingress processing with packet-level metrics
+    \item Bundler and scheduler with aggregation metrics
+    \item Mesh network infrastructure with link quality metrics
+    \item Fabric blockchain layer with transaction metrics
+    \item Observability endpoint with health and performance metrics
+\end{itemize}
+
+\textit{Diagram to be inserted here.}
+
+\section{Appendix B: Latency Pipeline Diagram}
+\label{app:latency}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{IMG_1839(1).png} % Replace with your actual filename
+    \caption{Breakdown of latency components in the data pipeline}
+    \label{fig:latency-pipeline}
+\end{figure}
+
+The latency pipeline diagram visualizes the sequential components contributing to total system latency, highlighting the relationships and dependencies between different delay elements.
+
+Components illustrated:
+\begin{itemize}
+    \item Sensor read latency ($L_{\text{read}}$)
+    \item Wireless transmission delay ($L_{\text{wifi}}$)
+    \item Ingress processing time ($L_{\text{ingress}}$)
+    \item Bundle waiting period ($L_{\text{bundle\_wait}}$)
+    \item Scheduling delay ($L_{\text{sched}}$)
+    \item Mesh network transit time ($L_{\text{mesh}}$)
+    \item Blockchain commit latency ($L_{\text{submit\_to\_commit}}$)
+\end{itemize}
+
+\textit{Sequence diagram to be inserted here.}
+
+\section{Appendix C: Troubleshooting Workflow Diagram}
+\label{app:troubleshooting}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{IMG_1840(1).png} % Replace with your actual filename
+    \caption{Breakdown of latency components in the data pipeline}
+    \label{fig:latency-pipeline}
+\end{figure}
+
+The troubleshooting workflow diagram provides a structured decision tree for identifying and resolving system issues based on observed metric anomalies.
+
+The diagram includes:
+\begin{itemize}
+    \item Symptom identification (delayed commits, missing data)
+    \item Metric-based issue classification
+    \item Targeted remediation strategies
+    \item Resolution verification steps
+\end{itemize}
+
+\textit{Decision tree to be inserted here.}
+
+\end{document}
