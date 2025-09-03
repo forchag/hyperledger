@@ -1,11 +1,82 @@
 \chapter{Results and Discussion}
 \label{chap:results}
 
+% ---------- Local macros for “our current numbers” (edit these once you have Caliper output) ----------
+% Fill these from your latest Caliper HTML report (Write/Commit latency percentiles & throughput)
+\newcommand{\CurrentP95L}{\textbf{[SET: e.g., 1.7\,s]}}   % p95 end-to-end latency
+\newcommand{\CurrentP99L}{\textbf{[SET: e.g., 2.6\,s]}}   % p99 end-to-end latency
+\newcommand{\CurrentTPS}{\textbf{[SET: e.g., 45\,tx/s]}}  % steady-state throughput
+\newcommand{\CurrentRel}{\textbf{[SET: e.g., 0.992]}}     % success ratio R over evaluation window
+\newcommand{\CurrentAvail}{\textbf{[SET: e.g., 0.997]}}   % availability A over evaluation window
+% Global SLO targets used throughout the discussion:
+\newcommand{\SLOpL}{\textbf{$p95(L)\!\!<\!2$\,s}}%
+\newcommand{\SLOpLnn}{\textbf{$p99(L)\!\!<\!3$\,s}}%
+\newcommand{\SLOR}{\textbf{$R\!\ge\!0.99$}}%
+\newcommand{\SLOA}{\textbf{$A\!\ge\!0.995$}}%
+% -----------------------------------------------------------------------------------------------
+
 \section{Introduction}
 This chapter presents the experimental evaluation of our blockchain-enabled IoT framework for smart agriculture with a focus on performance, scalability, reliability, security, and Quality of Service (QoS). Results are compared to consensus families and QoS considerations in \textbf{Part II} (Ch.~6–8) and to application-layer studies in \textbf{Part III} (Ch.~9–10). We analyze how the proposed \emph{CRT-based parallel transaction model} narrows the throughput/latency gap relative to DAG/hybrid, lightweight/selective, and reputation/credit-based approaches while preserving immutability and traceability (\emph{see Part II, Sec.~6.1–6.4}).
 
 \paragraph{System goals (from design drafts).}
 The system targets (i) verifiable, near–real-time sensing for irrigation and crop health, (ii) compact, energy-aware transaction payloads using CRT residues, (iii) hierarchical validation from sensors to gateways to a permissioned ledger (Hyperledger Fabric), and (iv) daily anchoring for long-term auditability (\emph{Part III, Sec.~9.1–9.4}).\ % AGENT TODO: Tighten this one-liner against the final figures in \texttt{mermaid\_diagram/*} once they are updated.
+
+% --------------------------------------------------------------------------
+\subsection{Research Questions, SLOs, and Hypotheses}
+\label{sec:rqs-slos}
+\textbf{Research Questions (RQs).}
+\emph{RQ1:} Can CRT-based partitioning of sensor payloads and transaction fields reduce on-chain payload and batching delay enough to keep \SLOpL\ (\SLOpLnn) under field conditions? 
+\emph{RQ2:} Does hierarchical/edge-assisted consensus (Fabric ordering at the core; light consensus at the edge) sustain \SLOR\ and \SLOA\ when nodes are intermittently connected? 
+\emph{RQ3:} What is the throughput/energy trade-off of CRT residue compression + daily Merkle anchoring to a public chain compared with fully on-chain storage?
+
+\textbf{Service Level Objectives (SLOs).}
+Unless otherwise noted, targets are for \emph{write} paths: \SLOpL, \SLOpLnn, \SLOR, \SLOA, and steady-state throughput sufficient to service irrigation/alerting bursts in $<\!5$\,s windows.
+These are consistent with recent agri-food blockchain deployments where private/permissioned stacks report sub-second \emph{node} latency and $<\!3.2$\,s block finalization at small scales, and with consensus/QoS reviews recommending percentiles over means for IoT workloads\cite{oh2025foodsafety,haque2024scalable}.
+
+\textbf{Hypotheses.}
+\textbf{H1 (Latency).} By sharding numeric fields into CRT residues and reconstructing off-chain, per-tx byte size and queueing shrink, yielding lower batch dwell and $\downarrow p95/p99$ latency compared with plain encoding at the same TPS. 
+\textbf{H2 (Reliability/Availability).} Edge aggregation with periodic anchoring keeps $R$ and $A$ above targets under link churn by decoupling local writes from public anchoring schedules.
+\textbf{H3 (Throughput/Energy).} CRT compression + daily Merkle anchoring reduces on-chain storage and orderer load, improving tx/s at equal CPU/network budgets; lightweight or domain-specific BFT variants further reduce message complexity and energy per committed tx\cite{haque2024scalable,coinspaid2023dag}.
+
+\noindent\emph{Observed in literature vs. our current:}
+(i) A recent private food‑traceability chain reports mean application latency around 260–280\,ms and block finalization $<\!3.2$\,s; our \CurrentP95L/\CurrentP99L\ should be within \SLOpL/\SLOpLnn\cite{oh2025foodsafety}. 
+(ii) Studies comparing Fabric/Quorum/DAGs show domain-specific or customized BFT variants cutting latency by roughly 70\% under horticulture-like loads; if our \CurrentTPS\ is bound at the orderer, CRT+batching should raise throughput until peer CPU saturates\cite{haque2024scalable}. 
+(iii) Hybrid on-/off-chain storage (e.g., IPFS with daily anchors) cuts on-chain storage by around 95\%, aligning with the rationale behind daily Merkle anchoring\cite{haque2024scalable}.
+
+\subsection{Metric $\rightarrow$ Decision Mapping (with SLO alignment)}
+\label{sec:metric-decision}
+\begin{itemize}
+  \item \textbf{Latency $L$ (end‑to‑end, p95/p99).} Directly gates \emph{actuation timeliness} (e.g., irrigation start/stop, frost alarms). Target: \SLOpL\ (\SLOpLnn). Definitions and use of percentiles follow Hyperledger performance guidance and Caliper (percentile latency)\cite{haque2024scalable}. \emph{Compare to SLO:} if $p95(L)\!=\!\CurrentP95L$, we meet irrigation timing; if $p99>\!3$\,s, defer some non‑critical writes to the next batch.
+  \item \textbf{Jitter $J\!=\!\sqrt{\mathrm{Var}[D]}$.} High $J$ destabilizes closed‑loop controls (valves, pumps). We keep $J_{p95}\!<\!0.5$\,s by batching with upper bounds and smoothing bursty sensor posts. \emph{Compare to SLO:} if $J$ spikes, switch to \emph{edge‑write + later anchor}.
+  \item \textbf{Reliability $R\!=\!\Pr\{D\le D_{\max}\}$.} Probability a write commits under the deadline; drives \emph{alert delivery} (pest/disease). \emph{SLO:} \SLOR. Private/consortium stacks in food chains report high success ratios at modest node counts; we mirror that via retries and edge buffering\cite{oh2025foodsafety}. \emph{Compare:} if $R\!=\!\CurrentRel<0.99$, down‑shift batch size and increase retry backoff.
+  \item \textbf{Availability $A$.} Fraction of intervals meeting SLOs; critical for \emph{traceability windows} (harvest\,$\rightarrow$\,packhouse). \emph{SLO:} \SLOA. Use health checks and orderer redundancy. \emph{Compare:} if $A\!=\!\CurrentAvail<0.995$, enable channel‑level failover.
+  \item \textbf{Throughput (tx/s).} Must absorb burst uploads (e.g., 120–150 sensor readings/s/hectare in horticulture scenarios) with bounded $L$. Caliper/Fabric guidance ties tx/s to endorsement, state DB and block size parameters\cite{haque2024scalable}. \emph{Compare:} if \CurrentTPS\ falls below the burst rate, raise block size until $p95(L)$ nears 2\,s.
+  \item \textbf{Energy (device/network).} Battery‑bound nodes favor lightweight or domain‑specific BFT or DAG write paths; several works show reduced message complexity and energy per transaction compared with PoW or generic BFT while preserving integrity\cite{coinspaid2023dag}. Use \emph{edge‑first writes + daily anchors}. \emph{Compare:} if mWh/tx rises during peaks, disable cryptographic extras on sensors and keep them at the gateway.
+\end{itemize}
+
+\subsection{Contributions (this work vs. prior art)}
+\label{sec:contrib-box}
+\noindent\fbox{\parbox{\linewidth}{
+\textbf{(1) CRT residue compression for agri‑IoT payloads.} We partition numeric sensor/state fields into residues and reconstruct off‑chain to shrink per‑transaction bytes and batch dwell. Prior block/body compression uses encoding and CRT generically; we specialize it for agricultural schemas and Fabric batching. \emph{New:} field‑aware residues and a validation path compatible with endorsement\cite{oh2025foodsafety}.
+
+\textbf{(2) Hierarchical consensus with edge buffering.} We keep edge writes local (fast) and commit summaries via Fabric orderers, improving percentile latency under link churn. Prior systems argue for domain‑specific or customized BFT latency cuts; we co‑design batching, channels and orderer parameters for farm bursts\cite{haque2024scalable}.
+
+\textbf{(3) Daily Merkle anchoring.} We store only Merkle roots on‑chain (private) and optionally anchor to a public chain daily/weekly to provide external proof while avoiding storage bloat; prior work shows large on‑chain storage savings with IPFS/off‑chain plus anchoring. \emph{New:} agriculture‑specific cadence and audit trail\cite{haque2024scalable}.
+
+\textbf{(4) Mesh observability.} We expose p95/p99 $L$, $J$, $R$, and $A$ in‑band through Caliper‑style exporters and map them to irrigation/alerting decisions; prior reviews call for percentile‑aware QoS in agri‑IoT. \emph{New:} an operational playbook tied to SLOs for farms\cite{coinspaid2023dag}.
+}}
+
+\subsection{Alignment with Parts II/III: Expected Wins and Trade‑offs (with numeric ranges)}
+\label{sec:part23-numbers}
+Based on recent deployments and evaluations, we expect: 
+(i) \emph{Latency:} domain‑specific BFT variants have demonstrated up to roughly 70\% latency reductions vs. generic BFT in horticulture‑like loads; private chains report sub‑second application latency and $<\!3.2$\,s finalization at 2–4 nodes. Our design targets \SLOpL/\SLOpLnn\ at 4–7 peers per channel\cite{oh2025foodsafety,haque2024scalable}. 
+(ii) \emph{Throughput:} tuning Fabric block size/timeout and endorsement raises tx/s until the state database or CPU saturates; literature shows Fabric typically outperforming Ethereum/Quorum on tx/s and latency in permissioned IoT contexts. Expect 30–200\,tx/s on modest hardware depending on chaincode and batch\cite{haque2024scalable}. 
+(iii) \emph{Storage/off‑chain:} hybrid IPFS plus daily anchors can reduce on‑chain data by about 95\%, with daily anchor cost amortized; CRT residue compression further reduces per‑transaction payload before off‑chain handoff\cite{haque2024scalable}. 
+(iv) \emph{Energy:} lightweight or DAG paths for anchors and domain‑specific BFT can reduce message and compute overhead vs. PoW or naïve BFT; reports on DAG-based networks (e.g., Hedera) indicate energy per transaction around 0.0001\,kWh compared to 240–950\,kWh for PoW chains\cite{coinspaid2023dag}. We therefore push full verification to gateways and keep sensors on signed telemetry only.
+
+\subsection{Section Roadmap}
+\label{sec:roadmap}
+Section~\ref{sec:rqs-slos} states the research questions, SLOs and hypotheses and introduces macros for our current numbers (to be set from Caliper). Section~\ref{sec:metric-decision} ties each metric to an operational decision (irrigation, alerting and traceability) with citations and SLO comparisons. Section~\ref{sec:contrib-box} highlights the paper’s contributions vs. prior art (CRT residues, hierarchical consensus, daily anchoring, observability). Section~\ref{sec:part23-numbers} quantifies expected wins and trade‑offs (p95 $L$, tx/s, storage, energy). A dedicated math section (Part~III) follows, deriving the batch‑queuing/latency impacts of CRT partitioning and giving closed‑form residue reconstruction bounds.
 
 \section{System Overview and Experimental Design}
 
