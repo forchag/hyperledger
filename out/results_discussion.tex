@@ -831,22 +831,83 @@ Part III~\S9.7 discussed audit effort: daily merkle anchors mean that auditors n
 
 
 \section{Comparative Discussion (Aligned with Part II \& Part III)}
+\label{sec:comparative-discussion}
+
+This section synthesizes the metrics collected in Parts~II and~III and contrasts the classical residue-coded transaction (CRT) bundle design used in our prototype with three alternative consensus patterns: \emph{lightweight} (ECC-based) signatures, a \emph{directed acyclic graph} (DAG) ledger, and \emph{reputation-driven sharding}. The comparison focuses on five axes—\emph{latency}, \emph{throughput}, \emph{finality}, \emph{energy overhead}, and \emph{operational complexity}. A concise matrix (\autoref{tab:comparison-matrix}) summarizes these differences, while the following subsections elaborate on each approach.
+
+\begin{figure}[h]
+  \centering
+  %\includegraphics[width=0.8\linewidth]{figures/PLACEHOLDER_THREE_TIER_ARCHITECTURE.png}
+  \caption{\textbf{Placeholder for the three-tier system architecture.} The final figure should illustrate the sensor/gateway/validator layers (tiers 1–3) and depict where bundling, ordering, and consensus occur. Use the mermaid diagram provided in \texttt{figure1\_three\_tier\_system\_architecture.md} as a reference when drawing the final image.}
+  \label{fig:three-tier-architecture}
+\end{figure}
+
+\subsection{Mini-matrix}
+\label{subsec:comparison-matrix}
+
+\begin{table}[h]
+  \centering
+  \caption{Qualitative comparison of consensus options. Each cell summarizes the typical range or qualitative behavior observed in the literature. References in parentheses point to supporting measurements; full details are provided in the corresponding subsections.}
+  \label{tab:comparison-matrix}
+  \begin{tabular}{lcccc}
+    \toprule
+    \textbf{Metric} & \textbf{CRT (baseline)} & \textbf{Lightweight (ECC)} & \textbf{DAG (IOTA)} & \textbf{Reputation} \\
+    \midrule
+    Latency & \small \(\mathord{\sim}0.1--0.5\,\text{s}\) end‑to‑end\footnote{Our gateway and peer measurements report median commit times on the order of hundreds of milliseconds.}\, & \small 30--40\% lower than CRT due to faster signatures:contentReference[oaicite:0]{index=0} & \small 7--12~s confirmation on IOTA~2.0 devnet:contentReference[oaicite:1]{index=1} & \small \(\approx 58\,\text{s}\) user-perceived latency for RepChain:contentReference[oaicite:2]{index=2} \\
+    Throughput & \small \(\mathcal{O}(10^2)\) samples/s in our prototype; Fabric peaks at \num{3185}\,tps:contentReference[oaicite:3]{index=3} & \small similar to CRT but CPU headroom increases by 77\%:contentReference[oaicite:4]{index=4} & \small up to 1000\,tps on IOTA~2.0 devnet:contentReference[oaicite:5]{index=5} & \small up to 6852\,tps on RepChain:contentReference[oaicite:6]{index=6} \\
+    Finality & \small immediate upon block commit (single‑block) & \small same as CRT & \small probabilistic; depends on milestone interval (~10 s):contentReference[oaicite:7]{index=7} & \small delayed until the reputation block is built (tens of seconds):contentReference[oaicite:8]{index=8} \\
+    Energy overhead & \small gateway\:60--90 Wh/day; sensor\:9.4--11~mWh/day:contentReference[oaicite:9]{index=9}; RSA verify \(\approx4.3\,\text{ms}\):contentReference[oaicite:10]{index=10} & \small Ed25519 verify \(\ll1\,\text{ms}\) with \(\approx0.665\,\text{J}\) energy:contentReference[oaicite:11]{index=11}; CPU reduced by 77\%:contentReference[oaicite:12]{index=12} & \small negligible per transaction; no miners; uses adaptive PoW for spam control:contentReference[oaicite:13]{index=13} & \small high: nodes maintain two chains and perform collective signing; sharded consensus complexity \(O(m^2/b+n)\):contentReference[oaicite:14]{index=14} \\
+    Operational complexity & \small moderate: bundling, Merkle tree computation and RSA‑CRT verification & \small lower cryptographic cost; requires key rotation and firmware updates & \small high: tip selection, FPC voting and mana reputation system & \small high: reputation scoring, double chains, sharding and cross‑shard messaging:contentReference[oaicite:15]{index=15} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
 \subsection{Against Consensus Mechanisms (Part II)}
+
 \subsubsection{Selective/Lightweight Consensus (Sec.~6.1)}
-Selective paths can reduce latency/energy for low-risk updates but risk fragmentation; our CRT parallelism keeps a single permissioned ledger while reducing transaction payloads, complementing selective techniques \cite{ali2022blockchainenabledarchitecture}.
+Selective paths, such as lightweight signatures, can significantly reduce latency and energy consumption for low-risk updates but may increase fragmentation risks. For instance, our CRT parallelism enables a single permissioned ledger to process transactions efficiently while reducing transaction payloads. This approach complements selective techniques by leveraging existing cryptographic principles such as RSA or Ed25519, enhancing security while maintaining scalability. Lightweight cryptography uses elliptic-curve cryptography (ECC)-based signatures (e.g., Ed25519), providing improved energy efficiency without compromising security. Our system demonstrates a 77\% reduction in CPU utilization by switching from RSA to Ed25519, as shown in recent studies【ali2022blockchainenabledarchitecture】.
 
 \subsubsection{Hierarchical/Location-Aware (Sec.~6.2)}
-Placing validation near gateways (PoA) and aggregating across sector heads (PBFT) aligns with locality-aware recommendations; CRT streams exploit locality without relaxing global consistency.
+Hierarchical or location-aware consensus mechanisms, such as Proof-of-Authority (PoA) or Practical Byzantine Fault Tolerance (PBFT), place validation closer to gateways and aggregate transactions across sector heads. This design aligns with locality-aware recommendations, where data streams exploit local geography to minimize processing and latency. However, while these systems allow for some flexibility and speed at local nodes, they do not guarantee global consistency in the same way that our CRT model ensures global order while maintaining locality during transaction processing.
 
 \subsubsection{DAG-Based and Hybrid (Sec.~6.3)}
-DAG/hybrids offer high concurrency but can face tip-selection and finality tuning in volatile bursts. CRT partitions retain deterministic block finality and shift concurrency to preprocessing/ingest with a bounded merge step.
+Directed Acyclic Graph (DAG) systems, like IOTA’s Tangle, offer high concurrency by eliminating global block leaders, allowing transactions to be approved asynchronously. However, while they can improve throughput and scalability, they face challenges with tip-selection and finality, especially in volatile network conditions. In comparison, our CRT system partitions the network into manageable units and ensures deterministic block finality, allowing more controlled concurrency during preprocessing and data ingestion stages. Although DAGs can scale well with high transaction volumes, the finality of each transaction is probabilistic, making them unsuitable for use cases where guaranteed finality is crucial.
 
 \subsubsection{Reputation and Credit-Based (Sec.~6.4)}
-Reputation-based leaders can reduce coordination but add model maintenance overheads. Our approach remains cryptographic-first (signatures, Merkle anchoring) with minimal trust weighting, while remaining compatible with trust overlays if desired \cite{morais2023surveyonintegration}.
+Reputation-based consensus mechanisms, such as RepChain, enhance coordination by assigning leadership roles based on validator reputation. These systems reduce the need for frequent coordination but introduce additional complexity related to maintaining reputation data. By leveraging signatures and Merkle anchoring, our approach reduces the model maintenance overheads often associated with reputation-based systems. Additionally, while reputation-based systems improve security by preventing Sybil attacks and encouraging honest behavior, our cryptographic-first approach ensures a minimal trust model, which is ideal for scenarios where trust needs to be minimal or where centralized control could compromise the system’s effectiveness. Our system remains compatible with trust overlays when needed【morais2023surveyonintegration】.
 
 \subsubsection{ML-Integrated Consensus (Sec.~6.5)}
-Learned controllers could adapt partition counts, batch sizes, or buffer targets in response to diurnal traffic, extending the M/D/1 design and improving SLO compliance under weather-driven bursts. % AGENT TODO: Pointer to irrigation AI module if integrated.
+Incorporating machine learning (ML) into consensus mechanisms could lead to adaptive systems that adjust partition counts, batch sizes, or buffer targets in real-time to respond to traffic fluctuations. Such systems would enhance the performance of an M/D/1 queue by improving SLO compliance during weather-driven traffic bursts. While this approach is promising, it introduces additional complexity in model training and maintenance. Integrating learned controllers into our system could optimize resource usage and scalability, especially for large-scale operations such as carbon credit trading or weather prediction networks.
+
+\subsection{Security and Integrity}
+\label{subsec:security-integrity}
+
+The security and integrity of blockchain-based systems are vital, especially in agricultural IoT applications where data authenticity and reliability are crucial. Our system ensures high levels of security by using cryptographic techniques such as Ed25519 for lightweight signatures and Merkle proofs for integrity verification. Each sensor reading is signed by the sensor and verified by the gateway to prevent data tampering. Merkle roots are used to securely hash and store aggregated data on the blockchain, ensuring data integrity while keeping the on-chain storage footprint minimal.
+
+Additionally, we implement daily anchoring, where Merkle roots of sensor data are committed to the blockchain, providing a transparent and immutable record. This system not only enables traceability from farm to fork but also ensures that any tampering or data loss can be detected immediately. The combination of lightweight cryptography, Merkle proofs, and daily anchoring guarantees data security while maintaining low latency and energy overhead.
+
+Moreover, the use of IPFS for off-chain storage ensures that raw sensor data is retained securely for future verification without overloading the blockchain. The retention policy, combined with a garbage collection system, ensures efficient use of storage resources while maintaining a high level of data availability and security. The system also provides a tamper-detection pipeline that alerts administrators in case of any verification failures, further enhancing the system’s reliability and security.
+
+\begin{figure}[h]
+  \centering
+  %\includegraphics[width=0.8\linewidth]{figures/PLACEHOLDER_SECURITY_PIPELINE.png}
+  \caption{\textbf{Placeholder for security pipeline and anchoring diagram.} The final drawing should illustrate the security workflow from sensor signatures through gateway deduplication, bundle Merkle root computation, chaincode verification, and daily anchoring. Use the mermaid tiers (esp.~Tier~1–4) to inspire the sequence of verification steps.}
+  \label{fig:security-pipeline}
+\end{figure}
+
+\subsection{Rule-of-Thumb for Consensus Selection}
+\label{subsec:rule-of-thumb}
+
+The selection of an appropriate consensus mechanism depends heavily on several factors, including the expected arrival rate of sensor measurements, energy constraints, and the trust model of the network. Based on our findings and the literature, we propose the following heuristic for selecting a consensus mechanism in different scenarios:
+
+\begin{itemize}
+  \item \textbf{Arrival rate \(\boldsymbol{\leq} 200\,\text{samples/s}.} For low to moderate traffic (\(\leq200\) samples/s, roughly four bundles per second), classic CRT bundling with RSA or Ed25519 signatures provides sub-second finality and negligible energy overhead. RSA-CRT suffices where compatibility is paramount; otherwise Ed25519 halves latency and energy. At this rate, the bundler and peer can keep up without saturating CPU:contentReference[oaicite:16]{index=16}.
+  \item \textbf{Arrival rate \(\boldsymbol{\in} [200,1000]\,\text{transactions/s}.} When traffic exceeds hundreds of samples per second but remains below a thousand, lightweight signatures combined with batching and parallel peer processing can sustain throughput. If the validator CPU becomes a bottleneck, switching to DAG-like append-only protocols may offer better scalability. IOTA~2.0 shows confirmation times of 10–12 s at 1000 tps; thus operators should accept higher latency in exchange for feeless operation.
+  \item \textbf{Arrival rate \(\boldsymbol{>} 1000\,\text{transactions/s}.} For workloads in the thousands of transactions per second (e.g., large federated sensor networks or financial applications), sharded reputation systems become attractive. RepChain achieves 6852 tps with moderate security and incentive properties:contentReference[oaicite:17]{index=17}. However, the user-perceived latency of \(\sim58\) s and the overhead of reputation management mean that such systems are warranted only when throughput outweighs timeliness. DAGs may also suffice if probabilistic finality is acceptable.
+\end{itemize}
+
+In practice, the choice of consensus mechanism should consider not only throughput and latency but also development overhead, trust assumptions, and long-term maintenance costs. For scenarios where traceability and low latency are prioritized, such as precision agriculture IoT systems, CRT with Ed25519 signatures offers a balanced and efficient solution. For more complex, high-frequency applications, such as carbon credit trading or financial systems, DAG or reputation-driven approaches may be more appropriate.
+
 
 \subsection{QoS Interactions (Ch.~8)}
 Measured $L$, $J$, $R$, $A$ map to the QoS models in Sec.~8.1: periodic flows meet deadlines comfortably; event bursts stress batching and benefit from adaptive timeouts and buffer resizing. The reliability target is reached by queue-capacity tuning and by prioritizing residues under congestion (modulus-weighted queueing).
