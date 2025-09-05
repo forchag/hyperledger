@@ -1,3 +1,110 @@
+\documentclass[12pt,onecolumn]{IEEEtran} % single-column, 12pt
+
+% --- Essential packages ---
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern} % Better font support
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{textcomp}
+\usepackage{microtype}
+
+% --- Page layout ---
+\usepackage[margin=1in]{geometry}
+
+% --- Font & spacing ---
+\usepackage{newtxtext,newtxmath}
+\usepackage{setspace}
+\AtBeginDocument{\setstretch{1.5}}  % 1.5 line spacing
+\usepackage{footmisc}
+\setlength{\footnotesep}{1.5\baselineskip} % Adjust footnote spacing
+
+% --- Table packages ---
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{booktabs} % you already use \toprule/\midrule/\bottomrule
+\usepackage{adjustbox}
+\usepackage{ragged2e}
+\usepackage{float}
+
+% Custom column types
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}} % fixed-width, ragged-right
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}        % flexible-width, ragged-right
+\newcolumntype{P}[1]{>{\RaggedRight\arraybackslash}p{#1}} % fixed-width ragged-right column
+\newcommand{\fitToPage}[1]{\begin{adjustbox}{max width=\textwidth}#1\end{adjustbox}}
+
+% Table formatting
+\setlength{\tabcolsep}{6pt}  % Adjusts column spacing
+\renewcommand{\arraystretch}{1.2} % Set to 1.5 if you want table rows also at 1.5
+
+% --- Section formatting ---
+\usepackage{titlesec}
+\titleformat{\part}[display]
+  {\normalfont\bfseries\fontsize{14pt}{16.8pt}\selectfont}  % 14pt, bold
+  {\partname~\thepart}{0.5em}{}
+\titleformat{\section}
+  {\normalfont\bfseries\fontsize{14pt}{16.8pt}\selectfont}
+  {\thesection}{1em}{}
+\titleformat{\subsection}
+  {\normalfont\bfseries\fontsize{12pt}{14pt}\selectfont}
+  {\thesubsection}{1em}{}
+\titleformat{\subsubsection}
+  {\normalfont\itshape\fontsize{12pt}{14pt}\selectfont}
+  {\thesubsubsection}{1em}{}
+
+% Section spacing
+\titlespacing*{\section}{0pt}{*2}{*1}
+\titlespacing*{\subsection}{0pt}{*1.5}{*0.8}
+\titlespacing*{\subsubsection}{0pt}{*1.2}{*0.6}
+
+% --- Numbering format ---
+\setcounter{secnumdepth}{3}
+\setcounter{tocdepth}{3}
+
+\makeatletter
+\renewcommand\thesection{\arabic{section}}
+\renewcommand\thesubsection{\thesection.\arabic{subsection}}
+\renewcommand\thesubsubsection{\thesubsection.\arabic{subsubsection}}
+
+% For table of contents
+\renewcommand{\numberline}[1]{\hb@xt@\@tempdima{#1\hfil}}
+\makeatother
+
+% --- Captions ---
+\usepackage{caption}
+\captionsetup{font={small,stretch=1.5}}  % Captions with 1.5 line spacing and small font size
+
+% --- Hyperlinks & references ---
+\usepackage[hyphens]{url}
+\Urlmuskip=0mu plus 1mu
+\usepackage[hidelinks]{hyperref}
+\hypersetup{
+    pdftitle={Blockchain-enabled IoT Framework for Smart Agriculture},
+    pdfauthor={},
+    pdfpagemode=UseOutlines,
+}
+\usepackage{cite}
+
+% --- Table of Contents formatting with tocloft package ---
+\usepackage{tocloft}
+\setlength{\cftsecindent}{0em}     % No indent for sections
+\setlength{\cftsubsecindent}{1.5em} % Indent for subsections
+\setlength{\cftsubsubsecindent}{3em} % Indent for subsubsections
+\setlength{\cftsecnumwidth}{2.5em}  % Adjust the number width for sections
+\setlength{\cftsubsecnumwidth}{3.5em} % Adjust the number width for subsections
+\setlength{\cftsubsubsecnumwidth}{4em} % Adjust the number width for subsubsections
+\setlength{\cftbeforesecskip}{1em}   % Space before each section in ToC
+\setlength{\cftbeforesubsecskip}{0.5em} % Space before each subsection
+\setlength{\cftbeforesubsubsecskip}{0.5em} % Space before each subsubsection
+
+% --- Document info ---
+\title{Literature Review and Comparative Analysis}
+
+
+\begin{document}
+
 \chapter{Results and Discussion}
 \label{chap:results}
 
@@ -1412,3 +1519,14 @@ We plan a multi‑farm replication to validate and extend our findings.  Candida
 % - Hierarchical/PoA/PBFT/FBA and M/D/1 buffer: internal consensus modules.
 % - Citation keys match out/references.bib used by out/new.tex.
 % AGENT TODO: Insert final numbers and figures when exports are ready.
+
+\section{References}\label{sec:references}
+% Place your bibliography command here if compiling this file directly, e.g.:
+% \bibliographystyle{IEEEtran}  % or your style
+% \bibliography{out/references}
+
+\clearpage
+\bibliographystyle{IEEEtran}
+\bibliography{references}  % <-- uses references.bib in the same directory
+
+\end{document}
