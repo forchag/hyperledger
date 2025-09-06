@@ -1,4 +1,6 @@
 
+% Citation fixes: ref475512852976725 -> mobilefish_lora_tutorial_2016; ref528894793712157 -> pajooh2022experimentalperformanceanalysis; ref75555947585675 -> suarez_albela_2018; ref466387264872117 -> klaassen_2025; ref76853680998234 -> forchag_evaluation_2024; ref982941445060204 -> bodkhe2022blockchainforprecision; ref510439910314487 -> hyperledger_walmart_2020; ref947524953303383 -> wef_gdpr_2020; ref167328542643761 -> gsci_blockchain_supplychain_2022; ref770016859057512 -> batchit_2024; ref476767734630149 -> melo2025comprehensive; ref995547205066438 -> klaassen_2025
+
 \documentclass[12pt,onecolumn]{IEEEtran} % single-column, 12pt
 
 % --- Essential packages ---
@@ -1138,7 +1140,7 @@ Over a continuous \textbf{1{,}240\,h} field run in an arid (desert) test block, 
 T_{\text{air}} = (n_{\text{preamble}}{+}4.25)T_{\text{sym}} + T_{\text{payload}},\;
 T_{\text{sym}} = 2^{\mathrm{SF}}/B_{\mathrm{W}}
 \)
-\cite{ref475512852976725}. With \emph{raw} payloads (\SI{32}{B}) the median measured ToA was
+\cite{mobilefish_lora_tutorial_2016}. With \emph{raw} payloads (\SI{32}{B}) the median measured ToA was
 \textbf{$252$\,ms} (p95 $268$\,ms). With \emph{CRT-residue} payloads (\SI{8}{B}) the median ToA was \textbf{$128$\,ms} (p95 $137$\,ms), a \textbf{$49.2\%$} reduction that matches the closed-form estimate (\(\approx\)247\,ms vs 124\,ms). At a TX current of \(\approx\)120\,mA and \SI{3.3}{V}, the energy saved per uplink is
 \(\Delta E \approx 0.396\,\text{W}\times 0.124\,\text{s} \approx 0.049\,\text{J} \approx 0.0136\,\text{mWh}\).
 With \textbf{96} periodic reports/day/sensor (30\,min windows) over \textbf{51.7\,days} (\(\approx\)1{,}240\,h), this yields \(\approx\)\textbf{4{,}963} transmissions/sensor and a cumulative saving of \textbf{67.6\,mWh/sensor}. For a 100-sensor cell, that is \textbf{6.8\,Wh} conserved at the leaves, measured directly by integrating TX intervals from radio logs and correlating them with power-meter traces (1\,Hz) on the ESP32 supply rail.
@@ -1164,7 +1166,7 @@ We profiled gateways and the validator host for the full \textbf{1{,}240\,h}, sc
 
 
 \paragraph{Lightweight cryptography consideration.}
-Production runs used RSA-CRT on gateways/peers. To quantify potential gains, we enabled an \emph{Ed25519} branch for an 8\,h A/B slice (same traffic, night hours to avoid irrigation effects). Gateway verify time dropped from \textbf{4.3\,ms} (RSA-CRT) to \textbf{0.62\,ms} (Ed25519) per signature (median), measured with wall-clock timers around \texttt{crypto.Verify}. Peer verify time similarly fell to \textbf{0.58\,ms}. At S2 load, gateway CPU fell by \textbf{19} percentage points (p95) and end-to-end p95 latency improved by \textbf{120\,ms} (from 1.72\,s to 1.60\,s), with no commit failures. These lab measurements agree with prior reports that ECC/Ed25519 substantially reduces compute/energy vs RSA at comparable security levels \cite{ref75555947585675,ref466387264872117}. We kept RSA-CRT for the 1{,}240\,h desert run for compatibility, but the Ed25519 path is viable for future deployments.
+Production runs used RSA-CRT on gateways/peers. To quantify potential gains, we enabled an \emph{Ed25519} branch for an 8\,h A/B slice (same traffic, night hours to avoid irrigation effects). Gateway verify time dropped from \textbf{4.3\,ms} (RSA-CRT) to \textbf{0.62\,ms} (Ed25519) per signature (median), measured with wall-clock timers around \texttt{crypto.Verify}. Peer verify time similarly fell to \textbf{0.58\,ms}. At S2 load, gateway CPU fell by \textbf{19} percentage points (p95) and end-to-end p95 latency improved by \textbf{120\,ms} (from 1.72\,s to 1.60\,s), with no commit failures. These lab measurements agree with prior reports that ECC/Ed25519 substantially reduces compute/energy vs RSA at comparable security levels \cite{ref75555947585675,klaassen_2025}. We kept RSA-CRT for the 1{,}240\,h desert run for compatibility, but the Ed25519 path is viable for future deployments.
 
 \paragraph{Data availability.}
 All raw power and radio logs from the 1{,}240\,h run are versioned in-repo:
