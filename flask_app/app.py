@@ -67,6 +67,11 @@ from sensor_simulator import build_mapping
 from identity_enrollment import enroll_identity
 from channel_block_retrieval import fetch_channel_block
 from hybrid_lora_network import build_demo_network
+from crt_pipeline import (
+    Gateway as CRTGateway,
+    SensorNode as CRTSensorNode,
+    compute_merkle_root as _compute_crt_merkle_root,
+)
 
 # Load gateway orchestrator components from the adjacent module so this file
 # serves as the main import point for both the legacy Flask endpoints and the
@@ -90,6 +95,11 @@ Scheduler = _orch.Scheduler
 HealthServer = _orch.HealthServer
 hmac_sha256 = _orch.hmac_sha256
 main = _orch.main
+
+# Re-export CRT pipeline utilities for external consumers
+SensorNode = CRTSensorNode
+Gateway = CRTGateway
+compute_crt_merkle_root = _compute_crt_merkle_root
 
 
 def create_app(config: dict | None = None) -> Flask:
