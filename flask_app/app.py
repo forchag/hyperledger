@@ -66,6 +66,7 @@ from nft_traceability import AgriNFT, TraceabilityLedger, verify_product
 from sensor_simulator import build_mapping
 from identity_enrollment import enroll_identity
 from channel_block_retrieval import fetch_channel_block
+from hybrid_lora_network import build_demo_network
 
 # Load gateway orchestrator components from the adjacent module so this file
 # serves as the main import point for both the legacy Flask endpoints and the
@@ -1005,6 +1006,25 @@ def simulation_state():
     mapping = build_mapping(config)
     _apply_mapping(mapping)
     return jsonify({"mapping": mapping})
+
+
+@app.route("/lora-demo")
+def lora_demo():
+    """Run a brief hybrid LoRa network simulation and return results."""
+    network = build_demo_network(node_count=3)
+    polls: list[dict] = []
+    events: list[dict] = []
+
+    def _poll(data: dict) -> None:
+        polls.append(data)
+
+    def _event(data: dict) -> None:
+        events.append(data)
+
+    network.handle_poll_response = _poll  # type: ignore[assignment]
+    network.handle_event = _event  # type: ignore[assignment]
+    network.run(frames=1)
+    return jsonify({"polls": polls, "events": events})
 
 
 @app.route("/one-click-test", methods=["POST"])
