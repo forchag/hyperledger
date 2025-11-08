@@ -132,20 +132,116 @@ Our main contributions include:
     \item Practical implementation guidelines and economic analysis for blockchain-IoT systems in agriculture
 \end{itemize}
 
-\section{Related Work}
+\section{State of the Art and Related Work}
 \label{sec:related_work}
 
-\subsection{Precision Agriculture and IoT}
-Precision agriculture has evolved significantly with advances in sensor technology and data analytics. Previous research has demonstrated the potential of IoT systems for optimizing irrigation \cite{evans2008precision}, monitoring crop health \cite{zhang2015prosper}, and reducing environmental impacts \cite{gebbers2010precision}. However, most existing systems rely on centralized architectures that present scalability limitations and single points of failure. Our work addresses these limitations through decentralized blockchain architecture and edge computing capabilities.
+This section provides a comprehensive review of the current state of research in precision agriculture, IoT systems, blockchain technology, and their integration in agricultural applications. We systematically analyze existing approaches, identify research gaps, and position our contributions within the broader scientific context.
 
-\subsection{Blockchain in Agriculture}
-Blockchain applications in agriculture have primarily focused on supply chain traceability \cite{tian2016supply} and food safety \cite{oh2025foodsafety}. Several studies have explored blockchain for agricultural data management, but few have addressed the unique requirements of real-time irrigation control and the computational constraints of edge devices in farming environments. \cite{haque2024scalable} demonstrated scalable blockchain architectures but lacked integration with practical agricultural applications.
+\subsection{Precision Agriculture and IoT Systems}
+\label{subsec:precision_agriculture}
 
-\subsection{Data Compression in IoT}
-Various data compression techniques have been proposed for IoT applications, including lossless compression \cite{li2018lossless} and adaptive sampling methods \cite{kjellsson2008adaptive}. The Chinese Remainder Theorem has been applied in cryptographic applications \cite{ding1996remainder} but has seen limited use for sensor data compression in agricultural contexts. Our work bridges these domains by implementing CRT-based compression specifically for agricultural data within a blockchain framework, validated through extensive field testing with economically important crops.
+Precision agriculture has undergone significant transformation with the advent of IoT technologies. Early systems focused on basic sensor networks for environmental monitoring \cite{wang2006wireless} and yield mapping \cite{mcbratney2005future}. The evolution toward data-driven farming has been well-documented in several comprehensive reviews \cite{zhang2002precision, gebbers2010precision}.
 
-\subsection{Wireless Communication in Agriculture}
-LoRa technology has emerged as a promising solution for agricultural IoT applications due to its long-range capabilities and low power consumption \cite{adelantado2017understanding}. Previous studies have demonstrated LoRa ranges up to 15 km in rural environments, but practical deployments often achieve 2–5 km depending on terrain and antenna placement. Our work extends this research by implementing a hierarchical network architecture combining LoRa for sensor communication and mesh networking for gateway connectivity.
+\subsubsection{Sensor Networks in Agriculture}
+Wireless Sensor Networks (WSNs) have been extensively deployed for soil monitoring \cite{bogena2010soil}, microclimate monitoring \cite{pierce1999site}, and irrigation control \cite{evans2008precision}. However, these systems often face challenges in energy efficiency, data integrity, and scalability. Recent advancements in low-power wide-area networks (LPWAN) have addressed some limitations, but integration with decision support systems remains fragmented \cite{aydin2021comprehensive}.
+
+\subsubsection{Edge Computing in Agricultural IoT}
+The shift toward edge computing has enabled real-time processing capabilities in agricultural applications \cite{sharma2020edge}. Studies by \cite{liu2019edge} demonstrated improved response times for irrigation control, while \cite{wang2021edge} showed enhanced privacy preservation through local data processing. Our work extends these concepts by integrating edge computing with blockchain for verifiable local decision-making.
+
+\subsubsection{Machine Learning in Precision Agriculture}
+Machine learning approaches have been increasingly applied for yield prediction \cite{van2017review}, disease detection \cite{mohanty2016using}, and irrigation optimization \cite{goap2018iot}. However, these systems often rely on cloud-based architectures that introduce latency and dependency on internet connectivity \cite{chlingaryan2018machine}. Our approach maintains local intelligence while ensuring data verifiability through blockchain integration.
+
+\subsection{Blockchain Technology in Agriculture}
+\label{subsec:blockchain_agriculture}
+
+Blockchain applications in agriculture have evolved from cryptocurrency origins to diverse supply chain and data management applications.
+
+\subsubsection{Supply Chain Traceability}
+The most mature application of blockchain in agriculture has been supply chain transparency \cite{tian2016supply, kamilaris2019rise}. Studies have demonstrated improved food safety through immutable tracking \cite{oh2025foodsafety} and enhanced consumer trust through provenance verification \cite{galvez2018future}. However, these implementations typically focus on post-harvest stages, leaving pre-harvest production data underutilized.
+
+\subsubsection{Agricultural Data Management}
+Research on blockchain for farm data management has been more limited. \cite{lin2018blockchain} proposed a framework for agricultural data sharing, while \cite{ferrag2020security} explored security aspects of blockchain in smart farming. Recent work by \cite{haque2024scalable} addressed scalability concerns but lacked integration with real-time control systems. Our research bridges this gap by implementing blockchain for both data integrity and real-time irrigation control.
+
+\subsubsection{Smart Contracts in Agriculture}
+The application of smart contracts to automate agricultural processes has shown promise in theoretical models \cite{rama2021systematic} and small-scale prototypes \cite{patil2022blockchain}. However, practical implementations addressing the computational constraints of agricultural environments remain scarce. Our work demonstrates efficient smart contract deployment on edge devices for irrigation management.
+
+\subsection{Data Compression and Efficiency in IoT}
+\label{subsec:data_compression}
+
+Efficient data management remains critical for resource-constrained IoT deployments in agriculture.
+
+\subsubsection{Traditional Compression Techniques}
+Lossless compression algorithms like LZW and Huffman coding have been adapted for sensor networks \cite{li2018lossless, marcelloni2009energy}. However, these approaches often require significant computational resources, making them unsuitable for battery-powered nodes. Adaptive sampling methods \cite{kjellsson2008adaptive} reduce data volume but may miss critical events.
+
+\subsubsection{Mathematical Compression Approaches}
+The Chinese Remainder Theorem (CRT) has been primarily applied in cryptographic applications \cite{ding1996remainder, garner1959residue} and error correction coding \cite{goldreich1999china}. Limited research exists on CRT for sensor data compression, with \cite{wang2018novel} exploring residue number systems for wireless sensors but without agricultural applications. Our work represents the first application of CRT compression specifically for agricultural sensor data within a blockchain framework.
+
+\subsubsection{Energy-Aware Data Management}
+Research on energy-efficient data transmission has focused on protocol optimization \cite{sanchez2021energy} and data aggregation techniques \cite{heinzelman2000energy}. However, these approaches often sacrifice data resolution or introduce processing delays. Our CRT-based method achieves compression without compromising data accuracy or timeliness.
+
+\subsection{Wireless Communication in Agricultural IoT}
+\label{subsec:wireless_communication}
+
+Communication technologies play a crucial role in agricultural IoT deployments, with trade-offs between range, power consumption, and data rate.
+
+\subsubsection{LoRa and LPWAN Technologies}
+LoRa technology has emerged as a dominant solution for agricultural applications due to its long-range capabilities and low power consumption \cite{adelantado2017understanding}. Field studies by \cite{li2020performance} demonstrated ranges up to 15 km in rural environments, while \cite{raj2017comprehensive} analyzed deployment considerations for agricultural settings. However, existing deployments typically use simple star topologies without integrated mesh networking.
+
+\subsubsection{Mesh Networking in Agriculture}
+Research on mesh networking for agriculture has been limited, with most studies focusing on urban or industrial applications \cite{akylidiz2005wireless}. The BATMAN-adv protocol has shown promise in rural connectivity projects \cite{schmidt2010b.a.t.m.a.n.} but has seen minimal application in precision agriculture. Our work innovates by combining LoRa for sensor connectivity with BATMAN-adv mesh networking for gateway communication.
+
+\subsubsection{Hybrid Communication Architectures}
+Recent research has explored hybrid approaches combining multiple communication technologies \cite{chettri2020comprehensive}. However, these implementations often lack seamless integration and introduce complexity in network management. Our hierarchical architecture provides a practical framework for combining different communication technologies while maintaining reliability and efficiency.
+
+\subsection{Edge Computing and Blockchain Integration}
+\label{subsec:edge_blockchain}
+
+The integration of edge computing with blockchain represents an emerging research area with significant potential for agricultural applications.
+
+\subsubsection{Edge-Blockchain Architectures}
+Recent studies have proposed various edge-blockchain architectures for IoT applications \cite{xu2020making, nguyen2019blockchain}. However, these frameworks often assume substantial computational resources unavailable in agricultural settings. Our work adapts these concepts for resource-constrained environments using Raspberry Pi devices and optimized consensus mechanisms.
+
+\subsubsection{Lightweight Blockchain Implementations}
+Research on lightweight blockchain implementations has focused on cryptographic optimizations \cite{dorri2017blockchain} and consensus mechanism improvements \cite{salah2019blockchain}. However, these approaches have not been extensively validated in agricultural field conditions. Our implementation demonstrates practical performance metrics for agricultural applications.
+
+\subsubsection{Real-time Control Systems}
+The integration of blockchain with real-time control systems remains largely unexplored. While \cite{zhang2019blockchain} proposed theoretical frameworks, practical implementations addressing the timing constraints of irrigation control are absent from literature. Our work provides the first field-validated integration of blockchain with real-time irrigation control.
+
+\subsection{Research Gaps and Contributions}
+\label{subsec:research_gaps}
+
+Based on our comprehensive literature review, we identify several critical research gaps that our work addresses:
+
+\begin{table}[!ht]
+\centering
+\caption{Research gaps addressed by this work}
+\label{tab:research_gaps}
+\begin{tabularx}{\textwidth}{lXl}
+\toprule
+\textbf{Research Area} & \textbf{Identified Gap} & \textbf{Our Contribution} \\
+\midrule
+Precision Agriculture & Limited integration of real-time control with data integrity verification & Blockchain-IoT framework with verifiable irrigation control \\
+Data Compression & No agricultural application of CRT for sensor data compression & CRT-based compression optimized for agricultural data types \\
+Network Architecture & Lack of hybrid LoRa-mesh networks for farm deployments & Hierarchical architecture combining LoRa and BATMAN-adv \\
+Edge Computing & Minimal research on blockchain at agricultural edge devices & Practical implementation on Raspberry Pi with performance metrics \\
+Real-time Systems & No field-validated blockchain integration for irrigation control & 61-day field study demonstrating SLO compliance \\
+Energy Efficiency & Limited approaches for compression without accuracy loss & CRT compression maintaining mathematical accuracy \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Our work makes several distinct contributions to the state of the art:
+
+\begin{enumerate}
+    \item \textbf{First application of CRT compression} for agricultural sensor data within a blockchain framework, achieving 33\% reduction in transmission size without accuracy loss
+    \item \textbf{Novel hybrid network architecture} combining LoRa for sensor communication and BATMAN-adv mesh for gateway connectivity, validated through 2-hectare deployment
+    \item \textbf{Comprehensive field validation} of blockchain performance for real-time irrigation control, demonstrating 99.4\% reliability and 1.7-second latency over 61 days
+    \item \textbf{Practical implementation guidelines} for edge-blockchain systems in resource-constrained agricultural environments
+    \item \textbf{Quantified water and labor savings} (23.8\% water reduction, 72\% labor reduction) through blockchain-automated irrigation
+\end{enumerate}
+
+This research bridges multiple domains—precision agriculture, IoT systems, blockchain technology, and edge computing—to create a comprehensive solution that addresses both technical and practical challenges in modern agricultural operations.
+
 
 \section{System Design and Architecture}
 \label{sec:system_design}
